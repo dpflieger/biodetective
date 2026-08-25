@@ -748,6 +748,21 @@ Deux pièges rencontrés en écrivant le client :
 L'adresse de contact n'est transmise que si `BIODETECTIVE_NCBI_EMAIL` est
 définie ; rien n'est codé en dur.
 
+#### Pourquoi pas `blastn -remote`
+
+BLAST+ sait faire la même chose tout seul, et ce serait plus simple à écrire.
+Essayé : `blastn -task blastn-short -query … -db nt -remote` **n'a jamais rendu
+la main en plus de 14 minutes** pour un brin de 24 bases, sans message d'erreur.
+
+Ce n'est pas un blocage réseau — `strace` montre la résolution DNS puis une
+connexion en HTTPS vers le NCBI, et le processus dort ensuite (`wchan =
+hrtimer_nanosleep`, aucun socket ouvert) : il interroge à un rythme bien plus
+lâche que nécessaire. Le même brin revient en **33 s** par l'interface URL.
+
+`remote_blast.py` est donc plus long à écrire, mais vingt fois plus rapide et
+il rend la main. À reconsidérer si une version future de BLAST+ resserre sa
+cadence d'interrogation.
+
 ---
 
 ### Traces BLAST vérifiables
