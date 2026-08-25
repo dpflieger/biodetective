@@ -650,6 +650,30 @@ et de le dessiner.
 
 ---
 
+### Idéogramme
+
+Le chromosome touché est dessiné à l'échelle, avec un marqueur à la position du
+hit — un SVG, sans aucune bibliothèque.
+
+> CHROMOSOME 1 — 1 DES 5 CHROMOSOMES · 30,4 Mb
+> `1 ────────────┃──────────────── 30,4 Mb`  hit en 12 345 679
+
+Le nom du chromosome vient de la correspondance `accession → nom` de
+`genome_stats.json`, pas d'une analyse du titre : un hit sur `NC_003070.9`
+devient « Chromosome 1 » de façon sûre. Sans correspondance, on retombe sur
+l'étiquette tirée du titre (« Génome chloroplastique »).
+
+**Seul le chromosome atteint est dessiné**, à sa longueur réelle donnée par
+`slen`. Représenter les autres supposerait des longueurs dont nous ne disposons
+pas : un caryotype complet exigerait la taille de chaque réplicon, que les
+rapports NCBI ne donnent pas. Un caryotype inventé vaudrait moins que pas de
+dessin du tout.
+
+Rien n'est dessiné en dessous de 1 000 pb : un marqueur de 800 pb n'a pas de
+géographie.
+
+---
+
 ### Localisation du hit
 
 L'écran de résultat annonce **où** la séquence a été trouvée : type de molécule,

@@ -505,6 +505,49 @@ body {
 
 .fact__value { text-align: right; }
 
+/* ------------------------------------------------------ idéogramme */
+
+.ideo {
+  margin-top: 2rem;
+  border: var(--border);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 0.9rem 1rem 0.7rem;
+}
+
+.ideo__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+  margin-bottom: 0.6rem;
+}
+
+.ideo__len { color: var(--color-muted); }
+
+/* Hauteur fixe : le chromosome s'étire en largeur, jamais en épaisseur. */
+.ideo__svg {
+  display: block;
+  width: 100%;
+  height: 54px;
+}
+
+.ideo__foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-top: 0.35rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.ideo__hit { color: var(--color-primary); letter-spacing: 0.06em; }
+
 /* ----------------------------------------------------- alignement */
 
 .align {

@@ -71,6 +71,7 @@ IMAGE_POOL_SIZE = 400
 MAX_JOBS = 200
 
 DB_PATH = os.environ.get("BIODETECTIVE_DB", "biodetective.db")
+GENOME_STATS = "genome_stats.json"
 
 # Historique des analyses. Persisté sur disque : une journée de démonstration
 # est longue et un redémarrage du backend ne doit pas l'effacer.
@@ -164,6 +165,8 @@ class State:
     jobs: dict = {}
     organism_count: int = 0
     history: list = []
+    # taxid -> {accession sans version: nom du chromosome}
+    replicons: dict = {}
 
 
 state = State()
@@ -179,6 +182,31 @@ def organisms_by_taxid(taxids):
             f"SELECT * FROM organisms WHERE taxonomy_id IN ({marks})",
             list(taxids)).fetchall()
     return {r["taxonomy_id"]: organism_dict(r) for r in rows}
+
+
+def strip_version(acc):
+    """NC_003070.9 -> NC_003070. Les versions divergent entre sources."""
+    return acc.rsplit(".", 1)[0] if "." in acc else acc
+
+
+def load_replicons(path):
+    """Index accession -> nom de chromosome, par espèce.
+
+    Permet de nommer « chromosome 1 » le chromosome touché de façon fiable,
+    à partir de son accession, plutôt qu'en analysant un texte libre.
+    """
+    if not os.path.exists(path):
+        log.warning("%s absent : pas d'idéogramme", path)
+        return {}
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    out = {}
+    for taxid, v in data.items():
+        reps = v.get("replicons") or {}
+        if reps:
+            out[int(taxid)] = {strip_version(a): n for n, a in reps.items()}
+    log.info("%s : réplicons connus pour %d espèces", path, len(out))
+    return out
 
 
 def load_history():
@@ -259,6 +287,7 @@ async def lifespan(app: FastAPI):
     state.identifier = Identifier()
     state.image_pool = load_image_pool()
     state.history = load_history()
+    state.replicons = load_replicons(GENOME_STATS)
 
     if not blast_search.blast_available():
         log.error("blastn introuvable : aucune analyse ne pourra aboutir.")
@@ -397,6 +426,39 @@ def draw_duration():
     return random.uniform(low, high), label
 
 
+def build_ideogram(hit, organism):
+    """De quoi dessiner le chromosome touché et y placer le hit.
+
+    On ne dessine que le chromosome atteint, à sa longueur réelle : c'est la
+    seule dont BLAST nous donne la taille exacte (slen). Représenter les
+    autres supposerait des longueurs qu'on n'a pas, et un caryotype inventé
+    vaudrait moins que pas de dessin du tout.
+    """
+    length = hit.get("subject_length")
+    if not length or length < 1000:
+        return None      # un marqueur de 800 pb ne se dessine pas
+
+    taxid = hit["taxonomy_id"]
+    name = state.replicons.get(taxid, {}).get(
+        strip_version(hit.get("accession", "")))
+    # À défaut du nom officiel, l'étiquette tirée du titre.
+    label = (f"Chromosome {name}" if name
+             else (hit.get("locus") or "Séquence de référence").capitalize())
+
+    start, end = hit["subject_start"], hit["subject_end"]
+    pos = min(start, end)
+    return {
+        "label": label,
+        "accession": hit.get("accession"),
+        "length": length,
+        "position": pos,
+        "fraction": round(pos / length, 6),
+        "strand": hit.get("strand"),
+        "chromosome_count": organism.get("chromosome_count"),
+        "is_chromosome": bool(name),
+    }
+
+
 def purge_jobs():
     """Oublie les jobs terminés les plus anciens au-delà de MAX_JOBS."""
     if len(state.jobs) <= MAX_JOBS:
@@ -468,6 +530,7 @@ async def run_analysis(job_id: str, sequence: str):
                 "subject_title": best.get("subject_title"),
                 "locus": best.get("locus"),
                 "strand": best.get("strand"),
+                "ideogram": build_ideogram(best, fiches[best["taxonomy_id"]]),
                 "accession": best["accession"],
                 "percent_identity": best["percent_identity"],
                 "evalue": best["evalue"],

@@ -120,6 +120,88 @@ function DnaStrip({ sequence, size = 'normal' }) {
 const fmt = (n) =>
   typeof n === 'number' ? n.toLocaleString('fr-FR') : n;
 
+/** Le chromosome touché, dessiné à l'échelle, avec le hit repéré dessus.
+
+   Seul le chromosome atteint est représenté : c'est le seul dont BLAST nous
+   donne la longueur exacte. Dessiner les autres supposerait des tailles que
+   nous n'avons pas, et un caryotype inventé vaudrait moins que rien. */
+function Ideogram({ data }) {
+  if (!data) return null;
+
+  const W = 900;          // repère interne du SVG, mis à l'échelle en CSS
+  const H = 54;
+  const PAD = 26;
+  const BAR = 26;
+  const barW = W - 2 * PAD;
+  const x = PAD + Math.min(1, Math.max(0, data.fraction)) * barW;
+  const mb = (n) => `${(n / 1e6).toFixed(1)} Mb`;
+
+  return (
+    <div className="ideo">
+      <div className="ideo__head">
+        <span>
+          {data.label}
+          {data.chromosome_count && data.is_chromosome
+            ? ` — 1 des ${data.chromosome_count} chromosomes`
+            : ''}
+        </span>
+        <span className="ideo__len">{mb(data.length)}</span>
+      </div>
+
+      <svg
+        className="ideo__svg"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={`Position du hit sur ${data.label} : ${data.position} sur ${data.length} bases`}
+      >
+        <defs>
+          <linearGradient id="chrom" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#2b2b2b" />
+            <stop offset="45%" stopColor="#4a4a4a" />
+            <stop offset="100%" stopColor="#232323" />
+          </linearGradient>
+        </defs>
+
+        <rect
+          x={PAD} y={(H - BAR) / 2} width={barW} height={BAR}
+          rx={BAR / 2} fill="url(#chrom)"
+          stroke="rgba(0,255,136,0.35)" strokeWidth="1"
+        />
+
+        {/* Repères tous les dixièmes, pour donner l'échelle sans chiffrer. */}
+        {Array.from({ length: 9 }, (_, i) => (
+          <line
+            key={i}
+            x1={PAD + ((i + 1) / 10) * barW} x2={PAD + ((i + 1) / 10) * barW}
+            y1={(H - BAR) / 2 + 4} y2={(H + BAR) / 2 - 4}
+            stroke="rgba(255,255,255,0.10)" strokeWidth="1"
+          />
+        ))}
+
+        {/* Le hit : trait plein sur toute la hauteur, plus une pointe. */}
+        <line
+          x1={x} x2={x} y1={(H - BAR) / 2 - 5} y2={(H + BAR) / 2 + 5}
+          stroke="#00ff88" strokeWidth="3" strokeLinecap="round"
+        />
+        <polygon
+          points={`${x - 6},${(H - BAR) / 2 - 6} ${x + 6},${(H - BAR) / 2 - 6} ${x},${(H - BAR) / 2 + 2}`}
+          fill="#00ff88"
+        />
+      </svg>
+
+      <div className="ideo__foot">
+        <span>1</span>
+        <span className="ideo__hit">
+          hit en {fmt(data.position)}
+          {data.strand === 'moins' ? ' (brin complémentaire)' : ''}
+        </span>
+        <span>{mb(data.length)}</span>
+      </div>
+    </div>
+  );
+}
+
 /** Alignement BLAST, présenté comme dans un vrai rapport.
 
    Chaque base de la requête est colorée en vert si elle correspond, en
@@ -667,6 +749,7 @@ export default function BioDetective() {
           </div>
         </div>
 
+        <Ideogram data={blast && blast.alignment && blast.alignment.ideogram} />
         <Alignment data={blast && blast.alignment} />
 
         {blast && blast.hits && blast.hits.length > 1 && (
