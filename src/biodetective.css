@@ -261,6 +261,30 @@ body {
   animation: scan 2s linear infinite;
 }
 
+.montage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* La bande fait N vignettes carrées de large et la hauteur du cadre ;
+   width:auto lui donne donc exactement N fois la largeur du cadre. */
+.montage__strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: auto;
+  max-width: none;
+  animation-name: montage-slide;
+  animation-iteration-count: infinite;
+}
+
+@keyframes montage-slide {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-100%); }
+}
+
 .search__waiting {
   position: absolute;
   inset: 0;
@@ -501,4 +525,7 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  /* Douze images par seconde, c'est beaucoup pour qui y est sensible :
+     on fige la bande sur sa première vignette. */
+  .montage__strip { animation: none !important; transform: none !important; }
 }

@@ -58,10 +58,12 @@ Biodetective/
 ├── sequences.json           # [FAIT] séquence → taxid (cœur de la démo)
 ├── identify.py              # [FAIT] normalisation + recherche exacte
 ├── validate_sequences.py    # [FAIT] contrôle avant démo
+├── make_montages.py         # [FAIT] fabrique les planches de l'écran de recherche
 ├── biodetective.db          # [GÉNÉRÉ] 25 545 organismes, 11 Mo
 ├── requirements.txt         # [FAIT]
 ├── api.py                   # [FAIT] API FastAPI, 8 routes
 ├── package.json             # [FAIT] config React (proxy → localhost:8000)
+├── public/montages/         # [GÉNÉRÉ] 20 planches JPEG, 18,6 Mo, non versionnées
 ├── new_taxdump/             # données NCBI (non versionnées)
 │   ├── names.dmp            # noms scientifiques et communs anglais
 │   ├── nodes.dmp            # rang de chaque taxon
@@ -118,10 +120,12 @@ npm install
 
 Pas de BLAST+, pas de conda bioconda, pas de base `nt` à télécharger.
 
-### Construction de la base (une seule fois)
+### Construction des données (une seule fois)
 ```bash
-python3 data_pipeline.py    # new_taxdump/*.dmp → biodetective.db
+python3 data_pipeline.py     # new_taxdump/*.dmp → biodetective.db
+python3 make_montages.py     # → public/montages/, ~2 min, réseau requis
 ```
+Les deux produisent des fichiers volumineux et régénérables, donc non versionnés.
 
 ### Lancement — le jour de la démo (une seule commande)
 ```bash
@@ -458,6 +462,39 @@ tourner que les images **déjà préchargées** (`ready`), jamais le pool brut.
 
 ---
 
+### Planches de l'écran de recherche
+
+L'attente doit ressembler à une recherche de série policière, pas à un diaporama.
+Les images ne sont donc pas chargées une par une : `make_montages.py` fabrique
+**20 planches** de 30 vignettes carrées (600 organismes distincts, 18,6 Mo), et le
+frontend en tire une au hasard à chaque analyse.
+
+Le défilement est **entièrement en CSS**, sans aucun timer JavaScript :
+
+```css
+.montage__strip { animation: montage-slide var(--durée) steps(30) infinite; }
+@keyframes montage-slide { from { translateX(0) } to { translateX(-100%) } }
+```
+
+`steps(N)` sur une translation de -100 % tombe exactement sur chaque vignette,
+puisque la bande fait N fois la largeur du cadre : le pas vaut `largeur/N`, soit
+une vignette pile. Vérifié à la mesure — translations de 836, 1254, 1672 px pour
+un cadre de 418 px, tous multiples exacts.
+
+**Cadence : `FRAME_MS = 80` dans `BioDetective.js`** — 12 images par seconde.
+C'est le réglage de l'effet. Le modifier ne demande **aucune refabrication**,
+contrairement à un GIF dont la vitesse est figée à la création. C'est la raison
+principale du choix de la planche plutôt que du GIF ; l'autre est le poids :
+18,6 Mo contre 59,5 Mo pour le même contenu en GIF, et sans tramage 256 couleurs.
+
+À 12 images/seconde, `prefers-reduced-motion` **fige la bande** sur sa première
+vignette plutôt que de la ralentir. Vérifié.
+
+Si `public/montages/` est absent, le frontend retombe sur une rotation image par
+image via `/api/random-images` : dégradé mais fonctionnel.
+
+---
+
 ## 🎨 Design System
 
 ### Palette de couleurs
@@ -579,7 +616,6 @@ Idem `Wikimedia Commons` (22 130) vs `Wikimedia  Commons` (double espace, 2) vs
 ## 🚧 Fonctionnalités à développer
 
 - [ ] **Script de validation `sequences.json`** — vérifier que chaque taxid existe et a une image
-- [ ] **Cache d'images en mémoire** — remplacer `ORDER BY RANDOM()`
 - [ ] **Polices en local** — retirer la dépendance Google Fonts
 - [ ] **Correspondance approximative** — si un enfant se trompe d'une brique, retrouver quand même
       l'organisme (distance d'édition sur `sequences.json`). Transformerait la majorité des

@@ -18,7 +18,13 @@ const BASE_COLORS = {
 const API = '/api';
 
 const POLL_MS = 500;
-const IMAGE_ROTATE_MS = 300;
+// Cadence du défilement, en millisecondes par vignette. C'est le réglage
+// « effet série policière » : 300 ms faisait diaporama, 80 ms fait recherche.
+// Modifiable ici sans refabriquer les planches, contrairement à un GIF.
+const FRAME_MS = 80;
+
+// Utilisée seulement en repli, quand les planches n'ont pas été fabriquées.
+const IMAGE_ROTATE_MS = 120;
 const MESSAGE_ROTATE_MS = 2000;
 
 // En dessous, la saisie est un accident plutôt qu'une séquence.
@@ -96,6 +102,8 @@ export default function BioDetective() {
   const [apiOk, setApiOk] = useState(null);
   const [pool, setPool] = useState([]);
   const [ready, setReady] = useState([]);
+  const [montages, setMontages] = useState([]);
+  const [montage, setMontage] = useState(null);
   const [imageIndex, setImageIndex] = useState(0);
   const [message, setMessage] = useState(SEARCH_MESSAGES[0]);
   const [fact, setFact] = useState(DNA_FACTS[0]);
@@ -131,6 +139,17 @@ export default function BioDetective() {
         if (alive) setApiOk(false);
         return;
       }
+      // Planches de l'écran de recherche, fabriquées par make_montages.py.
+      try {
+        const r = await fetch('/montages/index.json');
+        const d = await r.json();
+        if (alive && d.montages && d.montages.length) {
+          setMontages(d.montages);
+          setMontage(d.montages[Math.floor(Math.random() * d.montages.length)]);
+        }
+      } catch {
+        /* pas de planches : on tombera sur le repli image par image */
+      }
       try {
         const r = await fetch(`${API}/random-images?count=40`);
         const d = await r.json();
@@ -165,15 +184,26 @@ export default function BioDetective() {
     return () => { alive = false; };
   }, [pool]);
 
+  // Précharge la planche courante : elle pèse ~1 Mo, il ne faut pas la
+  // télécharger au moment où l'enfant lance l'analyse.
+  useEffect(() => {
+    if (!montage) return;
+    const el = new Image();
+    el.src = montage.file;
+  }, [montage]);
+
   const reset = useCallback(() => {
     clearAllIntervals();
+    if (montages.length) {
+      setMontage(montages[Math.floor(Math.random() * montages.length)]);
+    }
     setInput('');
     setAnalysed('');
     setOrganism(null);
     setErrorMessage('');
     setImageLoaded(false);
     setScreen('home');
-  }, [clearAllIntervals]);
+  }, [clearAllIntervals, montages]);
 
   const fail = useCallback(
     (msg) => {
@@ -210,11 +240,14 @@ export default function BioDetective() {
     setMessage(SEARCH_MESSAGES[0]);
     setScreen('search');
 
-    // Animations de l'écran de recherche
-    timers.current.image = setInterval(
-      () => setImageIndex((i) => i + 1),
-      IMAGE_ROTATE_MS
-    );
+    // Animations de l'écran de recherche. Avec une planche, le défilement
+    // est purement CSS et ne coûte aucun timer.
+    if (!montage) {
+      timers.current.image = setInterval(
+        () => setImageIndex((i) => i + 1),
+        IMAGE_ROTATE_MS
+      );
+    }
     let m = 0;
     timers.current.message = setInterval(() => {
       m = (m + 1) % SEARCH_MESSAGES.length;
@@ -254,7 +287,7 @@ export default function BioDetective() {
         fail('La connexion au serveur a été interrompue.');
       }
     }, POLL_MS);
-  }, [input, clearAllIntervals, fail, finish]);
+  }, [input, montage, clearAllIntervals, fail, finish]);
 
   const onKeyDown = (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) startAnalysis();
@@ -319,7 +352,23 @@ export default function BioDetective() {
         <h2 className="search__title">ANALYSE EN COURS</h2>
 
         <div className="search__frame">
-          {img ? (
+          {montage ? (
+            /* Défilement 100 % CSS : une bande de N vignettes translatée par
+               pas entiers. steps(N) sur une translation de -100 % tombe
+               exactement sur chaque vignette, puisque la bande fait N fois
+               la largeur du cadre. */
+            <div className="montage">
+              <img
+                className="montage__strip"
+                src={montage.file}
+                alt=""
+                style={{
+                  animationDuration: `${montage.frames * FRAME_MS}ms`,
+                  animationTimingFunction: `steps(${montage.frames})`,
+                }}
+              />
+            </div>
+          ) : img ? (
             /* Pas de prop key : elle remonterait un <img> neuf à chaque
                rotation, et un élément fraîchement monté n'a pas encore
                peint. On réutilise le même noeud en ne changeant que src,
