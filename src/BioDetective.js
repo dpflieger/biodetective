@@ -12,6 +12,11 @@ const BASE_COLORS = {
 
 // L'analyse dure ~4 s côté serveur ; interroger toutes les 500 ms suffit à
 // ce que l'attente perçue ne dépasse pas le délai voulu.
+// Les routes de l'API vivent sous /api : la racine est occupée par le
+// frontend lui-même, que ce soit react-scripts en développement ou FastAPI
+// qui sert le build en production.
+const API = '/api';
+
 const POLL_MS = 500;
 const IMAGE_ROTATE_MS = 300;
 const MESSAGE_ROTATE_MS = 2000;
@@ -118,7 +123,7 @@ export default function BioDetective() {
         // react-scripts sert son propre index.html sur / et ne le relaie
         // pas au backend. Un fetch('/') répondrait donc 200 avec du HTML
         // même backend éteint — un test de vie qui réussit toujours.
-        const r = await fetch('/stats', { headers: { Accept: 'application/json' } });
+        const r = await fetch(`${API}/stats`, { headers: { Accept: 'application/json' } });
         const data = await r.json();
         if (!r.ok || typeof data.organisms !== 'number') throw new Error('bad payload');
         if (alive) setApiOk(true);
@@ -127,7 +132,7 @@ export default function BioDetective() {
         return;
       }
       try {
-        const r = await fetch('/random-images?count=40');
+        const r = await fetch(`${API}/random-images?count=40`);
         const d = await r.json();
         if (alive) setPool(d.images || []);
       } catch {
@@ -218,7 +223,7 @@ export default function BioDetective() {
 
     let jobId;
     try {
-      const r = await fetch('/analyze', {
+      const r = await fetch(`${API}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sequence: input }),
@@ -238,7 +243,7 @@ export default function BioDetective() {
 
     timers.current.poll = setInterval(async () => {
       try {
-        const r = await fetch(`/analyze/${jobId}`);
+        const r = await fetch(`${API}/analyze/${jobId}`);
         if (!r.ok) {
           fail("L'analyse a été perdue. Relance-la.");
           return;

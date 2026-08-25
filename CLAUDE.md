@@ -123,17 +123,26 @@ Pas de BLAST+, pas de conda bioconda, pas de base `nt` à télécharger.
 python3 data_pipeline.py    # new_taxdump/*.dmp → biodetective.db
 ```
 
-### Lancement (2 commandes, 2 terminaux)
+### Lancement — le jour de la démo (une seule commande)
 ```bash
-# Terminal 1 - Backend
+npm run build        # une fois, après toute modification du frontend
 python3 api.py
-# → API disponible sur http://localhost:8000
-# → Docs automatiques : http://localhost:8000/docs
-
-# Terminal 2 - Frontend
-npm start
-# → Interface disponible sur http://localhost:3000
+# → tout sur http://localhost:8000
 ```
+FastAPI sert lui-même le frontend compilé. **Un seul processus, un seul port,
+aucun proxy.** C'est le mode à utiliser en salle : rien à expliquer à qui
+redémarre la machine.
+
+### Lancement — en développement (rechargement à chaud)
+```bash
+# Terminal 1
+python3 api.py       # http://localhost:8000
+
+# Terminal 2
+npm start            # http://localhost:3000, proxy /api → 8000
+```
+Le port 3000 recharge à chaud mais impose le contrôle d'hôte de react-scripts
+(voir `.env`). Le port 8000 n'a pas cette contrainte.
 
 ---
 
@@ -141,16 +150,25 @@ npm start
 
 ### Endpoints
 
+**Toutes les routes sont préfixées par `/api`** : la racine `/` est occupée par
+le frontend compilé.
+
 | Méthode | Route | Description |
 |---------|-------|-------------|
-| GET | `/` | Statut de l'API |
-| GET | `/stats` | Statistiques de la base de données |
-| GET | `/random-images?count=8` | Images aléatoires pour l'animation de recherche |
-| POST | `/analyze` | Soumettre une séquence ADN pour analyse |
-| GET | `/analyze/{job_id}` | Récupérer le résultat d'un job |
-| DELETE | `/analyze/{job_id}` | Supprimer un job |
-| GET | `/organism/{taxonomy_id}` | Détails d'un organisme |
-| POST | `/reload` | Recharger `sequences.json` sans redémarrer |
+| GET | `/api/` | Statut de l'API |
+| GET | `/api/stats` | Statistiques de la base de données |
+| GET | `/api/random-images?count=8` | Images aléatoires pour l'animation de recherche |
+| POST | `/api/analyze` | Soumettre une séquence ADN pour analyse |
+| GET | `/api/analyze/{job_id}` | Récupérer le résultat d'un job |
+| DELETE | `/api/analyze/{job_id}` | Supprimer un job |
+| GET | `/api/organism/{taxonomy_id}` | Détails d'un organisme |
+| POST | `/api/reload` | Recharger `sequences.json` sans redémarrer |
+| GET | `/` | Frontend compilé (ou message d'aide si `build/` absent) |
+| GET | `/docs` | Documentation interactive FastAPI |
+
+Le montage statique est déclaré **après** `include_router` : FastAPI résout les
+routes dans l'ordre de déclaration, donc `/api/...` est traité avant le
+catch-all du frontend.
 
 `POST /reload` permet de corriger ou d'ajouter une séquence en pleine journée de démo
 sans couper le service.
@@ -159,7 +177,7 @@ sans couper le service.
 
 ### Format requête
 ```json
-POST /analyze
+POST /api/analyze
 {
   "sequence": "ATCGATCGATCG..."
 }
@@ -212,7 +230,7 @@ aux vraies pannes (base illisible, séquence vide, caractères non-ADN).
 `running` → `completed` (avec `matched` true ou false) ou `error`.
 
 Une séquence **invalide** (lettres autres que ATCG, champ vide) ne crée pas de job :
-`POST /analyze` répond directement **400** avec un message affichable tel quel.
+`POST /api/analyze` répond directement **400** avec un message affichable tel quel.
 Une séquence **valide mais inconnue** crée bien un job qui aboutit à
 `200 / completed / matched:false`. Ne pas confondre les deux côté React.
 
@@ -364,7 +382,7 @@ CREATE TABLE phylogenetic_tree (
 [Écran Recherche] (3-5 s)
   → Images aléatoires d'organismes qui défilent
   → Messages de progression
-  → Polling /analyze/{job_id} toutes les 500 ms
+  → Polling /api/analyze/{job_id} toutes les 500 ms
       ↓
       ├── matched: true  → [Écran Résultat]
       ├── matched: false → [Écran Séquence inconnue]
@@ -402,7 +420,7 @@ const [isAPIConnected, setIsAPIConnected] = useState(false);
 ```
 
 ### Intervals/Timers à gérer (via useRef)
-- `pollingInterval` : poll `/analyze/{job_id}` toutes les **500 ms** (l'analyse dure 3-5 s,
+- `pollingInterval` : poll `/api/analyze/{job_id}` toutes les **500 ms** (l'analyse dure 3-5 s,
   un polling à 2 s ajouterait jusqu'à 2 s d'attente inutile)
 - `imageRotationInterval` : rotation des images toutes les 300 ms
 - `messageInterval` : rotation des messages toutes les 2 s
@@ -422,13 +440,17 @@ const [isAPIConnected, setIsAPIConnected] = useState(false);
 
 ### Deux pièges à ne pas réintroduire
 
-**1. Le test de vie ne doit pas taper sur `/`.** Le serveur de développement de
-react-scripts sert son propre `index.html` sur `/` et ne relaie au backend que les
-chemins absents de `public/`. Un `fetch('/')` répond donc 200 avec du HTML même
-backend éteint : le test réussit toujours. On interroge `/stats` et on vérifie que
-la réponse contient bien un `organisms` numérique.
+**1. Le test de vie ne doit pas taper sur `/`.** La racine sert le frontend, dans
+les deux modes. Un `fetch('/')` répond 200 avec du HTML même backend éteint : le
+test réussirait toujours. On interroge `/api/stats` et on vérifie que la réponse
+contient bien un `organisms` numérique.
 
-**2. Pas de prop `key` sur l'image qui tourne.** Avec une `key` changeante, React
+**2. Le contrôle d'hôte de react-scripts répond HTTP 200.** Son corps vaut
+« Invalid Host header », mais le statut est 200. Tester un accès en regardant le
+code de retour ne prouve donc rien : il faut regarder le **contenu**. Ce piège ne
+concerne que le port 3000 ; le port 8000 n'a aucun contrôle d'hôte.
+
+**3. Pas de prop `key` sur l'image qui tourne.** Avec une `key` changeante, React
 remonte un `<img>` neuf toutes les 300 ms ; un élément fraîchement monté n'a pas
 encore peint, et le cadre de l'écran de recherche reste noir pendant toute
 l'analyse. On réutilise le même noeud en ne changeant que `src`, et on ne fait
@@ -580,7 +602,7 @@ Idem `Wikimedia Commons` (22 130) vs `Wikimedia  Commons` (double espace, 2) vs
 5. ~~`api.py` : `/analyze` + polling + `/random-images`~~ ✅
 6. ~~Frontend : accueil → recherche → résultat~~ ✅
 7. ~~Frontend : écran « séquence inconnue »~~ ✅
-8. ~~Polices locales~~ ✅, ~~purge des jobs~~ ✅, cache d'images **local** (reste à faire)
+8. ~~Polices locales~~ ✅, ~~purge des jobs~~ ✅, ~~serveur unique~~ ✅, cache d'images **local** (reste à faire)
 9. Répétition générale dans les conditions réelles de la salle
 
 ---

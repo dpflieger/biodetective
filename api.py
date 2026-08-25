@@ -23,8 +23,10 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from identify import Identifier, SequenceError, normalize
@@ -46,6 +48,9 @@ IMAGE_POOL_SIZE = 400
 MAX_JOBS = 200
 
 DB_PATH = os.environ.get("BIODETECTIVE_DB", "biodetective.db")
+# Frontend compilé par « npm run build ». Absent = mode développement,
+# où react-scripts sert l'interface sur le port 3000.
+BUILD_DIR = os.environ.get("BIODETECTIVE_BUILD", "build")
 HOST = "0.0.0.0"
 PORT = 8000
 
@@ -194,6 +199,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Toutes les routes de l'API vivent sous /api pour laisser la racine au
+# frontend compilé. Sans ce préfixe, GET / ne pourrait pas être à la fois
+# l'état de l'API et la page d'accueil.
+api = APIRouter(prefix="/api")
+
 
 # --------------------------------------------------------------------------
 # Modèles
@@ -207,7 +217,7 @@ class AnalyzeRequest(BaseModel):
 # Routes de consultation
 # --------------------------------------------------------------------------
 
-@app.get("/")
+@api.get("/")
 def root():
     """État de l'API — sert de test de vie au frontend."""
     return {
@@ -220,7 +230,7 @@ def root():
     }
 
 
-@app.get("/stats")
+@api.get("/stats")
 def stats():
     """Statistiques de la base, pour un écran d'accueil ou un contrôle rapide."""
     with connect() as conn:
@@ -243,7 +253,7 @@ def stats():
     }
 
 
-@app.get("/organism/{taxonomy_id}")
+@api.get("/organism/{taxonomy_id}")
 def organism(taxonomy_id: int):
     """Fiche complète d'un organisme."""
     with connect() as conn:
@@ -254,7 +264,7 @@ def organism(taxonomy_id: int):
     return organism_dict(row)
 
 
-@app.get("/random-images")
+@api.get("/random-images")
 def random_images(count: int = 8):
     """Images aléatoires pour l'animation de l'écran de recherche.
 
@@ -337,7 +347,7 @@ def job_payload(job):
     }
 
 
-@app.post("/analyze")
+@api.post("/analyze")
 async def analyze(req: AnalyzeRequest):
     """Lance une analyse et retourne immédiatement un job_id à interroger."""
     try:
@@ -360,7 +370,7 @@ async def analyze(req: AnalyzeRequest):
     return job_payload(state.jobs[job_id])
 
 
-@app.get("/analyze/{job_id}")
+@api.get("/analyze/{job_id}")
 def analyze_result(job_id: str):
     """Résultat d'une analyse. Interrogé toutes les 500 ms par le frontend."""
     job = state.jobs.get(job_id)
@@ -369,14 +379,14 @@ def analyze_result(job_id: str):
     return job_payload(job)
 
 
-@app.delete("/analyze/{job_id}")
+@api.delete("/analyze/{job_id}")
 def analyze_delete(job_id: str):
     if state.jobs.pop(job_id, None) is None:
         raise HTTPException(404, "Analyse inconnue.")
     return {"deleted": job_id}
 
 
-@app.post("/reload")
+@api.post("/reload")
 def reload_sequences():
     """Recharge sequences.json sans redémarrer l'API.
 
@@ -389,6 +399,31 @@ def reload_sequences():
         raise HTTPException(500, f"Rechargement impossible : {exc}")
     log.info("sequences.json rechargé : %d séquences", len(state.identifier))
     return {"known_sequences": len(state.identifier)}
+
+
+app.include_router(api)
+
+
+# Le montage statique vient APRÈS include_router : FastAPI teste les routes
+# dans l'ordre de déclaration, donc /api/... est résolu avant d'atteindre le
+# catch-all du frontend.
+if os.path.isdir(BUILD_DIR):
+    @app.get("/", include_in_schema=False)
+    def index():
+        return FileResponse(os.path.join(BUILD_DIR, "index.html"))
+
+    app.mount("/", StaticFiles(directory=BUILD_DIR, html=True), name="frontend")
+    log.info("Frontend servi depuis %s/", BUILD_DIR)
+else:
+    @app.get("/", include_in_schema=False)
+    def index_missing():
+        return {
+            "message": f"Frontend non compilé ({BUILD_DIR}/ absent).",
+            "action": "Lancer « npm run build », ou « npm start » pour le "
+                      "mode développement sur le port 3000.",
+            "api": "/api",
+            "docs": "/docs",
+        }
 
 
 if __name__ == "__main__":
