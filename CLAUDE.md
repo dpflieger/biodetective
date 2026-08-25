@@ -69,13 +69,42 @@ pour un enfant qui improvise.
 ```bash
 # 1. sur le serveur qui héberge nt
 python3 extract_from_nt.py --db /chemin/vers/nt --taxids taxids.txt
-#    -> biodetective_subset.fasta (~25 Mo), à rapatrier
+#    -> un FASTA d'une quarantaine de mégaoctets, à rapatrier
 
 # 2. sur la machine de démonstration
-makeblastdb -in biodetective_subset.fasta -dbtype nucl -out blastdb/biodetective
-python3 make_strips.py --length 24     # brins réels, vérifiés par BLAST
-python3 validate_sequences.py          # contrôle avant démo
+python3 prepare_blastdb.py --fasta taxids.fasta   # nettoie puis makeblastdb
+python3 make_strips.py --length 24                # brins réels, vérifiés par BLAST
+python3 validate_sequences.py                     # contrôle avant démo
 ```
+
+`prepare_blastdb.py` n'est pas une commodité : `blastdbcmd -taxidlist` descend
+dans la hiérarchie et rapporte des sous-espèces dont le taxid n'existe pas dans
+`biodetective.db`. Un hit sur l'une d'elles ne trouverait aucune fiche et serait
+écarté, alors que c'est souvent la bonne réponse. Le script les rattache à leur
+ancêtre présent en base via `nodes.dmp`, et retire ce qui ne se rattache à rien.
+
+### La banque en service
+
+| | |
+|---|---|
+| Séquences | 44 772 |
+| Espèces | 21 489 sur 25 545 (**84 %**) |
+| Taille | **32,0 Mpb** |
+| Rattachées à l'espèce parente | 545 |
+| E-value pour 24 pb | **~1,1 × 10⁻⁶** |
+
+### Brins préparés : 31 sur 33
+
+Deux organismes n'ont **aucun fragment de 24 bases qui les distingue** :
+
+- **Papillon monarque** — BLAST y arrive, mais tous les fragments discriminants
+  contiennent 3 briques identiques d'affilée, ce que la règle LEGO interdit.
+- **Vigne** — impossible même à 36 bases : la séquence de référence de
+  *Vitis vinifera* est partagée avec les autres vignes. C'est de la biologie,
+  pas un défaut de réglage. Le meilleur hit reste un *Vitis*.
+
+Les deux restent dans `common_names_fr.json` : si la banque change, ils
+repasseront peut-être.
 
 `taxids.txt` se régénère par
 `sqlite3 biodetective.db "SELECT taxonomy_id FROM organisms;" > taxids.txt`.

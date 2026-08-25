@@ -26,7 +26,7 @@ import blast_search as bs
 FASTA_CANDIDATES = ["biodetective_subset.fasta", "dev_subset.fasta"]
 OUT = "sequences.json"
 LEGO_MAX_RUN = 2          # jamais 3 briques identiques d'affilée
-TRIES_PER_SPECIES = 40
+TRIES_PER_SPECIES = 250
 
 
 def load_fasta(path):
@@ -64,6 +64,8 @@ def main():
                     help="nombre de briques par brin")
     ap.add_argument("--fasta", default=None)
     ap.add_argument("--out", default=OUT)
+    ap.add_argument("--tries", type=int, default=TRIES_PER_SPECIES,
+                    help="positions testées au maximum par espèce")
     args = ap.parse_args()
 
     fasta = args.fasta or next((f for f in FASTA_CANDIDATES
@@ -100,12 +102,17 @@ def main():
             skipped.append((nom_fr, "pas d'image"))
             continue
 
+        # Balayage systématique de toutes les positions utilisables, dans un
+        # ordre mélangé. Le tirage aléatoire avec remise repassait sur les
+        # mêmes positions et échouait sur les espèces à proches parents :
+        # chez la cigogne ou la vigne, un 24-mer discriminant est rare.
+        positions = [i for i in range(len(ref) - args.length + 1)
+                     if usable(ref[i:i + args.length])]
+        rng.shuffle(positions)
+
         chosen = None
-        for _ in range(TRIES_PER_SPECIES):
-            start = rng.randrange(0, len(ref) - args.length)
+        for start in positions[:args.tries]:
             frag = ref[start:start + args.length]
-            if not usable(frag):
-                continue
             # Le juge de paix : ce fragment désigne-t-il bien cette espèce ?
             hits = bs.search_sync(frag)
             if not hits:
@@ -116,7 +123,8 @@ def main():
                 break
 
         if chosen is None:
-            skipped.append((nom_fr, "aucun fragment discriminant"))
+            skipped.append((nom_fr, f"aucun fragment discriminant "
+                                    f"({len(positions)} positions testées)"))
             continue
 
         frag, top, start = chosen
