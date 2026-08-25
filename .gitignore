@@ -1,0 +1,24 @@
+# Données NCBI (volumineuses, retéléchargeables)
+new_taxdump/
+new_taxdump.tar.gz
+*.dmp
+
+# Base générée par data_pipeline.py
+biodetective.db
+*.db-journal
+*.db-wal
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.log
+
+# Node / React
+node_modules/
+build/
+.env.local
+
+# Divers
+.DS_Store
