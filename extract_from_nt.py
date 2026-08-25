@@ -185,8 +185,8 @@ def main():
     ap.add_argument("--priority", default="priority_taxids.txt",
                     help="taxons jamais plafonnés (ceux de la démonstration)")
     ap.add_argument("--out", default="biodetective_subset.fasta")
-    ap.add_argument("--budget", type=int, default=5_000_000,
-                    help="bases par espèce ; 0 = aucun plafond")
+    ap.add_argument("--budget", type=int, default=0,
+                    help="bases par espèce ; 0 = aucun plafond (défaut)")
     ap.add_argument("--min-length", type=int, default=0,
                     help="ignorer les séquences plus courtes")
     ap.add_argument("--survey", action="store_true",

@@ -80,7 +80,15 @@ python3 validate_sequences.py
 
 `extract_from_nt.py` prend **tout** ce que nt contient pour nos taxons : aucun
 plafond de longueur, aucune sélection par marqueur, aucun quota par espèce.
-C'est un petit nt restreint à notre liste de taxid.
+C'est un petit nt restreint à notre liste de taxid. Un plafond par espèce
+existe (`--budget`) mais **n'est pas actif par défaut** ; `--survey` simule
+plusieurs plafonds sans rien extraire, si le besoin s'en présente un jour.
+
+**Prévoir la place.** L'extraction dépasse largement 500 Go. `prepare_blastdb.py`
+n'écrit donc **pas** de copie nettoyée : il réécrit les en-têtes à la volée et
+pousse le flux directement dans `makeblastdb`, qui lit `stdin`. Sans cela il
+faudrait deux fois la taille du FASTA sur le disque. `--skip-makeblastdb` rétablit
+l'écriture d'un fichier, au prix de cette place.
 
 **Pourquoi aucun plafond.** La première version n'en gardait qu'une séquence par
 espèce, pour protéger la E-value. C'était une erreur : la banque ne contenait

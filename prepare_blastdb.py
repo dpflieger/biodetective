@@ -71,7 +71,9 @@ def main():
     ap.add_argument("--fasta", default="taxids.fasta")
     ap.add_argument("--out", default="biodetective_subset.fasta")
     ap.add_argument("--db", default="blastdb/biodetective")
-    ap.add_argument("--skip-makeblastdb", action="store_true")
+    ap.add_argument("--skip-makeblastdb", action="store_true",
+                    help="écrire le FASTA nettoyé au lieu de construire "
+                         "la banque (occupe le disque en double)")
     args = ap.parse_args()
 
     conn = sqlite3.connect("biodetective.db")
@@ -92,50 +94,70 @@ def main():
     total_bp = 0
     species = set()
 
-    with open(args.fasta) as src, open(args.out, "w") as dst:
-        emit = False
-        for line in src:
-            if line.startswith(">"):
-                raw = line[1:].rstrip("\n")
-                taxid, _, rest = raw.partition("|")
-                acc, _, title = rest.partition(" ")
-                target = resolve(taxid, wanted, parents, cache)
-                if target is None:
-                    emit = False
-                    dropped += 1
-                    continue
-                emit = True
-                kept += 1
-                if target != taxid:
-                    remapped += 1
-                species.add(target)
-                dst.write(f">{target}|{acc}"
-                          + (f" {title}" if title else "") + "\n")
-            elif emit:
-                dst.write(line)
-                total_bp += len(line.strip())
+    # Le FASTA d'entrée peut peser plusieurs centaines de gigaoctets. On
+    # n'en écrit pas une seconde copie : les en-têtes sont réécrits à la
+    # volée et poussés directement dans makeblastdb, qui lit stdin. Sans
+    # cela il faudrait deux fois la place sur le disque.
+    mkdb = None
+    sink = None
+    if args.skip_makeblastdb:
+        sink = open(args.out, "w")
+    else:
+        os.makedirs(os.path.dirname(args.db) or ".", exist_ok=True)
+        sys.path.insert(0, ".")
+        import blast_search
+        exe = os.path.join(os.path.dirname(blast_search.BLASTN or ""),
+                           "makeblastdb") if blast_search.BLASTN \
+            else "makeblastdb"
+        print(f"Construction de la banque en flux avec {exe}…", flush=True)
+        mkdb = subprocess.Popen(
+            [exe, "-in", "-", "-dbtype", "nucl", "-out", args.db,
+             "-title", "BioDetective"],
+            stdin=subprocess.PIPE, text=True)
+        sink = mkdb.stdin
+
+    try:
+        with open(args.fasta) as src:
+            emit = False
+            for line in src:
+                if line.startswith(">"):
+                    raw = line[1:].rstrip("\n")
+                    taxid, _, rest = raw.partition("|")
+                    acc, _, title = rest.partition(" ")
+                    target = resolve(taxid, wanted, parents, cache)
+                    if target is None:
+                        emit = False
+                        dropped += 1
+                        continue
+                    emit = True
+                    kept += 1
+                    if target != taxid:
+                        remapped += 1
+                    species.add(target)
+                    sink.write(f">{target}|{acc}"
+                               + (f" {title}" if title else "") + "\n")
+                    if kept % 500000 == 0:
+                        print(f"  {kept:,} séquences, {total_bp/1e9:.1f} Gpb",
+                              flush=True)
+                elif emit:
+                    sink.write(line)
+                    total_bp += len(line.strip())
+    finally:
+        if mkdb is not None:
+            sink.close()
+            mkdb.wait()
+        else:
+            sink.close()
 
     print(f"\n{kept:,} séquences conservées")
     print(f"  dont {remapped:,} rattachées à l'espèce parente")
     print(f"{dropped:,} écartées (aucun ancêtre en base)")
     print(f"{len(species):,} espèces représentées")
-    print(f"{total_bp/1e6:.1f} Mpb  ->  E-value attendue pour 24 pb : "
-          f"~{5.4e-7*(total_bp/16.2e6):.1e}")
-
-    if args.skip_makeblastdb:
-        return 0
-
-    os.makedirs(os.path.dirname(args.db) or ".", exist_ok=True)
-    sys.path.insert(0, ".")
-    import blast_search
-    mkdb = os.path.join(os.path.dirname(blast_search.BLASTN or ""),
-                        "makeblastdb") if blast_search.BLASTN else "makeblastdb"
-    print(f"\nConstruction de la banque avec {mkdb}…")
-    r = subprocess.run([mkdb, "-in", args.out, "-dbtype", "nucl",
-                        "-out", args.db, "-title", "BioDetective"],
-                       capture_output=True, text=True)
-    print(r.stdout.strip() or r.stderr.strip())
-    return r.returncode
+    print(f"{total_bp/1e6:,.0f} Mpb  ->  E-value attendue pour 24 pb : "
+          f"~{1.06e-6*(total_bp/32e6):.1e}")
+    if mkdb is not None:
+        return mkdb.returncode
+    return 0
 
 
 if __name__ == "__main__":
