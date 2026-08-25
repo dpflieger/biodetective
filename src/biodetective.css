@@ -528,6 +528,153 @@ body {
 
 .fact__value { text-align: right; }
 
+/* --------------------------------------------------------- cousins */
+
+.cousins {
+  margin-top: 2rem;
+  border: var(--border);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 0.9rem 1rem 1.1rem;
+}
+
+.cousins__head {
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+  margin-bottom: 1rem;
+}
+
+.cousins__body {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+/* Épine verticale : matérialise l'ancêtre commun d'où partent les branches. */
+.cousins__branches {
+  flex: 1;
+  min-width: 260px;
+  border-left: 2px solid rgba(0, 255, 136, 0.3);
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.branch { position: relative; }
+
+/* Le trait horizontal qui rejoint l'épine. */
+.branch::before {
+  content: '';
+  position: absolute;
+  left: -1.1rem;
+  top: 0.55rem;
+  width: 0.8rem;
+  height: 2px;
+  background: rgba(0, 255, 136, 0.3);
+}
+
+.branch__rank {
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: 0.45rem;
+}
+
+.branch__rank strong {
+  color: var(--color-primary);
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: 0.04em;
+}
+
+.branch__kin { display: flex; gap: 0.7rem; flex-wrap: wrap; }
+
+.kin { width: 96px; text-align: center; }
+
+.kin img {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 255, 136, 0.25);
+  display: block;
+}
+
+.kin__name {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  color: var(--color-text);
+}
+
+.kin__num {
+  display: block;
+  margin-top: 0.15rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.66rem;
+  color: var(--color-primary);
+  opacity: 0.75;
+}
+
+.kin__sci {
+  display: block;
+  font-size: 0.68rem;
+  font-style: italic;
+  color: var(--color-muted);
+  line-height: 1.2;
+}
+
+/* L'organisme identifié : plus grand, c'est lui la racine. */
+.kin--main { width: 132px; }
+
+.kin--main img {
+  width: 132px;
+  height: 132px;
+  border-color: var(--color-primary);
+  box-shadow: var(--glow);
+}
+
+.kin--main .kin__name { font-size: 0.92rem; color: var(--color-primary); }
+
+/* ------------------------------------------------------ rapport brut */
+
+.raw { margin-top: 1.5rem; }
+
+.raw__toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-secondary);
+  font-family: inherit;
+  font-size: 0.82rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.raw__toggle:hover { color: var(--color-primary); }
+
+.raw__body {
+  margin: 0.6rem 0 0;
+  padding: 0.9rem;
+  max-height: 380px;
+  overflow: auto;
+  background: #050505;
+  border: var(--border);
+  border-radius: 5px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--color-muted);
+  white-space: pre;
+}
+
 /* ------------------------------------------------------ idéogramme */
 
 .ideo {

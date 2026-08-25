@@ -120,6 +120,104 @@ function DnaStrip({ sequence, size = 'normal' }) {
 const fmt = (n) =>
   typeof n === 'number' ? n.toLocaleString('fr-FR') : n;
 
+/** Les autres hits BLAST, présentés pour ce qu'ils sont : la parenté.
+
+   Une liste de hits n'est pas une liste de « moins bonnes réponses ». Les
+   suivants sont les cousins de l'organisme trouvé, et le montrer explique
+   d'un coup ce que fait vraiment un alignement de séquences. */
+function Cousins({ organism, relatives, totalHits }) {
+  if (!organism || !relatives || relatives.length === 0) return null;
+
+  // Regroupe les cousins par rang partagé, en gardant l'ordre du plus
+  // proche au plus lointain déjà décidé côté serveur.
+  const groups = [];
+  relatives.forEach((r) => {
+    const last = groups[groups.length - 1];
+    if (last && last.key === r.rank_key && last.value === r.rank_value) {
+      last.items.push(r);
+    } else {
+      groups.push({
+        key: r.rank_key, label: r.rank_label,
+        value: r.rank_value, items: [r],
+      });
+    }
+  });
+
+  const card = (o, main) => (
+    <div className={`kin${main ? ' kin--main' : ''}`} key={o.taxonomy_id}>
+      <img
+        src={(main ? (o.image || {}).url : o.image) || PLACEHOLDER}
+        alt=""
+        onError={(e) => { e.target.src = PLACEHOLDER; }}
+      />
+      <span className="kin__name">{o.display_name || o.scientific_name}</span>
+      <span className="kin__sci">{o.scientific_name}</span>
+      {!main && (
+        <span className="kin__num">
+          {String(o.percent_identity).replace('.', ',')} % · E {o.evalue.toExponential(0)}
+        </span>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="cousins">
+      <div className="cousins__head">
+        Ses cousins — reconnus à partir de l'ADN seul
+        {totalHits ? ` · ${totalHits} correspondances au total` : ''}
+      </div>
+      <div className="cousins__body">
+        {card(organism, true)}
+        <div className="cousins__branches">
+          {groups.map((g) => (
+            <div className="branch" key={g.key + g.value}>
+              <div className="branch__rank">
+                Même {g.label} <strong>{g.value}</strong>
+              </div>
+              <div className="branch__kin">{g.items.map((o) => card(o, false))}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Le rapport blastn brut, replié. Pour qui veut vérifier. */
+function RawReport({ jobId }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(null);
+  const [error, setError] = useState(null);
+
+  const toggle = async () => {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    if (text !== null) return;
+    try {
+      const r = await fetch(`${API}/blast-report/${jobId}`);
+      if (!r.ok) throw new Error('indisponible');
+      const d = await r.json();
+      setText(d.report);
+    } catch {
+      setError("Rapport indisponible pour cette analyse.");
+    }
+  };
+
+  if (!jobId) return null;
+  return (
+    <div className="raw">
+      <button className="raw__toggle" onClick={toggle}>
+        {open ? '▾' : '▸'} Voir le rapport BLAST brut
+      </button>
+      {open && (
+        <pre className="raw__body">
+          {error || text || 'Chargement…'}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 /** Le chromosome touché, dessiné à l'échelle, avec le hit repéré dessus.
 
    Seul le chromosome atteint est représenté : c'est le seul dont BLAST nous
@@ -301,6 +399,7 @@ export default function BioDetective() {
   const [history, setHistory] = useState([]);
   const [histStats, setHistStats] = useState(null);
   const [fromHistory, setFromHistory] = useState(false);
+  const [jobId, setJobId] = useState(null);
 
   // Tous les intervalles vivent ici : un timer oublié continue de tourner
   // en fond et fait clignoter l'écran de résultat.
@@ -449,6 +548,7 @@ export default function BioDetective() {
       setAnalysed(job.sequence || '');
       setElapsed(job.analysis_time || null);
       setBlast(job.blast || null);
+      setJobId(job.job_id || null);
       if (job.status === 'error') {
         fail(job.error_message || "L'analyse a échoué.");
       } else if (job.matched && job.organism) {
@@ -753,25 +853,15 @@ export default function BioDetective() {
           </div>
         </div>
 
+        <Cousins
+          organism={organism}
+          relatives={blast && blast.relatives}
+          totalHits={blast && blast.total_hits}
+        />
         <Ideogram data={blast && blast.alignment && blast.alignment.ideogram} />
         <Alignment data={blast && blast.alignment} />
 
-        {blast && blast.hits && blast.hits.length > 1 && (
-          <div className="others">
-            <div className="others__title">
-              Autres correspondances trouvées ({blast.total_hits} au total)
-            </div>
-            {blast.hits.slice(1, 5).map((h) => (
-              <div className="others__row" key={h.accession}>
-                <span className="others__name">
-                  {h.display_name || h.scientific_name || h.accession}
-                </span>
-                <span className="others__num">{String(h.percent_identity).replace('.', ',')}&nbsp;%</span>
-                <span className="others__num">E {h.evalue.toExponential(0)}</span>
-              </div>
-            ))}
-          </div>
-        )}
+        {!fromHistory && <RawReport jobId={jobId} />}
       </div>
     );
   };

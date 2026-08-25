@@ -655,6 +655,47 @@ et de le dessiner.
 
 ---
 
+### « Ses cousins » — la parenté déduite des hits
+
+Une liste de hits BLAST n'est pas une liste de mauvaises réponses : ce sont les
+**parents** de l'organisme trouvé. L'écran de résultat les présente donc comme
+un arbre, groupés par le rang taxonomique qu'ils partagent avec lui.
+
+Sur le brin « Lion » :
+
+| Rang partagé | Cousins | Identité |
+|---|---|---|
+| genre *Panthera* | tigre, léopard, jaguar | 100 %, 95,5 %, 95,5 % |
+| classe *Mammalia* | souris à poche soyeuse | 100 % |
+| embranchement *Chordata* | deux rainettes | 95,5 % |
+
+Le dégradé est la leçon : plus le cousin est proche, meilleur est le hit. C'est
+le sens même d'un alignement, rendu visible sans un mot d'explication.
+
+`shared_rank()` compare les deux lignées du plus précis au plus large et retient
+le premier rang où elles coïncident. Aucun arbre externe : la taxonomie est déjà
+dans `biodetective.db`.
+
+Cet arbre a remplacé l'ancienne liste « autres correspondances », qui faisait
+doublon dès lors que les mêmes organismes s'affichaient au-dessus avec leur
+photo. Les chiffres — identité et E-value — sont passés sur les vignettes.
+
+---
+
+### Rapport BLAST brut, dans l'interface
+
+`▸ Voir le rapport BLAST brut` déplie le fichier archivé : la commande, le
+tableau, les alignements, les paramètres de Karlin-Altschul. C'est la réponse à
+« et ça donne quoi, vraiment ? » — la question que pose un collègue
+bioinformaticien devant le stand.
+
+Servi par `GET /api/blast-report/{job_id}`, qui vérifie que le chemin demandé
+reste bien dans `blast_results/` : une route qui rend un fichier ne doit jamais
+pouvoir en rendre un autre. Masqué lors de la relecture d'une analyse passée,
+dont le job n'existe plus en mémoire.
+
+---
+
 ### Idéogramme
 
 Le chromosome touché est dessiné à l'échelle, avec un marqueur à la position du

@@ -428,6 +428,71 @@ def draw_duration():
     return random.uniform(low, high), label
 
 
+# Du plus précis au plus large. Le premier rang où deux organismes
+# coïncident dit à quel point ils sont cousins.
+RANKS = [
+    ("genus", "genre"),
+    ("family", "famille"),
+    ("order_name", "ordre"),
+    ("class_name", "classe"),
+    ("phylum", "embranchement"),
+    ("kingdom", "règne"),
+]
+
+
+def shared_rank(a, b):
+    """(clé, étiquette, valeur) du rang commun le plus précis. None sinon."""
+    for key, label in RANKS:
+        va, vb = a.get(key), b.get(key)
+        if va and vb and va == vb:
+            return key, label, va
+    return None
+
+
+def build_relatives(hits, fiches, best):
+    """Les autres hits, situés par rapport à l'organisme identifié.
+
+    C'est la lecture honnête d'une liste de hits BLAST : ce ne sont pas des
+    « moins bonnes réponses », ce sont les parents de l'organisme trouvé.
+    Sur un brin d'Arabidopsis, les suivants sont moutarde, chou et colza —
+    toute la famille des Brassicacées.
+    """
+    ref = fiches.get(best["taxonomy_id"])
+    if not ref:
+        return []
+    out, seen = [], {best["taxonomy_id"]}
+    for h in hits:
+        taxid = h["taxonomy_id"]
+        if taxid in seen:
+            continue
+        o = fiches.get(taxid)
+        if not o:
+            continue
+        sr = shared_rank(ref, o)
+        if not sr:
+            continue
+        seen.add(taxid)
+        key, label, value = sr
+        out.append({
+            "taxonomy_id": taxid,
+            "display_name": o["display_name"],
+            "scientific_name": o["scientific_name"],
+            "organism_type": o["organism_type"],
+            "image": (o.get("image") or {}).get("url"),
+            "rank_key": key,
+            "rank_label": label,
+            "rank_value": value,
+            "percent_identity": h["percent_identity"],
+            "evalue": h["evalue"],
+        })
+        if len(out) >= 6:
+            break
+    # Du plus proche au plus lointain : l'ordre des rangs, pas celui de BLAST.
+    order = {k: i for i, (k, _l) in enumerate(RANKS)}
+    out.sort(key=lambda r: (order[r["rank_key"]], r["evalue"]))
+    return out
+
+
 def build_ideogram(hit, organism):
     """De quoi dessiner le chromosome touché et y placer le hit.
 
@@ -488,7 +553,7 @@ async def run_analysis(job_id: str, sequence: str):
         job["blast_archive"] = archive
 
         # Une fiche par taxon touché, en une seule requête SQL.
-        fiches = organisms_by_taxid([h["taxonomy_id"] for h in hits[:10]])
+        fiches = organisms_by_taxid([h["taxonomy_id"] for h in hits[:30]])
 
         ranked = []
         for h in hits[:5]:
@@ -517,6 +582,7 @@ async def run_analysis(job_id: str, sequence: str):
             "hits": ranked,
             "total_hits": len(hits),
             "alignment": None,
+            "relatives": [],
         }
         if best:
             job["blast"]["alignment"] = {
@@ -540,6 +606,7 @@ async def run_analysis(job_id: str, sequence: str):
                 "mismatches": best["mismatches"],
                 "gaps": best["gaps"],
             }
+            job["blast"]["relatives"] = build_relatives(hits, fiches, best)
             job.update(status="completed", matched=True,
                        organism=fiches[best["taxonomy_id"]])
             blast_search.append_verdict(archive,
@@ -710,6 +777,33 @@ async def remote_blast_start(req: AnalyzeRequest):
     asyncio.create_task(run_remote(job_id, sequence))
     log.info("[%s] BLAST distant lancé : %s", job_id[:8], sequence)
     return job_payload(state.jobs[job_id])
+
+
+@api.get("/blast-report/{job_id}")
+def blast_report(job_id: str):
+    """Le rapport blastn brut d'une analyse, tel qu'archivé.
+
+    Ce que voit un bioinformaticien quand il demande « et ça donne quoi
+    vraiment ? » : la commande, le tableau, les alignements, les paramètres
+    de Karlin-Altschul.
+    """
+    job = state.jobs.get(job_id)
+    path = job.get("blast_archive") if job else None
+    if not path:
+        raise HTTPException(404, "Aucun rapport pour cette analyse.")
+
+    # Le chemin vient de nos propres écritures, mais on vérifie tout de même
+    # qu'il reste dans le dossier d'archives : une route qui rend un fichier
+    # ne doit jamais pouvoir en rendre un autre.
+    root = os.path.realpath(blast_search.RESULTS_DIR or ".")
+    full = os.path.realpath(path)
+    if not full.startswith(root + os.sep) or not os.path.isfile(full):
+        raise HTTPException(404, "Rapport introuvable.")
+
+    with open(full, encoding="utf-8", errors="replace") as fh:
+        text = fh.read()
+    return {"job_id": job_id, "file": os.path.basename(full),
+            "bytes": len(text), "report": text}
 
 
 @api.get("/history")
