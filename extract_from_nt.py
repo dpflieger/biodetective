@@ -3,185 +3,143 @@
 """
 extract_from_nt.py — À LANCER SUR LE SERVEUR QUI HÉBERGE nt.
 
-Extrait de nt une séquence représentative par espèce, pour les taxons de
-BioDetective qui possèdent une image. Produit un FASTA d'une trentaine de
-mégaoctets, à rapatrier sur la machine de démonstration.
+Extrait de nt **toutes** les séquences des taxons de BioDetective, c'est-à-dire
+ceux qui possèdent une image. Autrement dit : un petit nt restreint à notre
+liste de taxid. Aucun plafond, aucune sélection.
 
-    python3 extract_from_nt.py --db /chemin/vers/nt --taxids taxids.txt
+    python3 extract_from_nt.py --db /chemin/vers/nt
+    python3 extract_from_nt.py --db /chemin/vers/nt --survey   # mesurer d'abord
 
-Ne nécessite que blastdbcmd et python3. Rien d'autre du projet.
+Ne nécessite que blastdbcmd et python3.
 
-⚠️ La TAILLE de la base finale est le paramètre critique. La E-value est
-proportionnelle à la taille de la banque : les briques du Brickopore font
-16 bases, ce qui donne E = 0,01 contre 16 Mpb, mais E = 1 contre 1,6 Gpb,
-c'est-à-dire plus rien d'exploitable. D'où une seule séquence par espèce et
-un plafond de longueur : surtout pas les génomes complets.
+Le taxid est écrit dans l'identifiant FASTA (`>taxid|accession`), pour que la
+machine de démonstration n'ait besoin d'aucun fichier de taxonomie pour relier
+un hit à sa fiche.
+
+Note de dimensionnement : la E-value est proportionnelle à la taille de la
+banque, mais la marge est confortable. Mesuré avec -dbsize, un brin de
+24 briques donne E = 1e-6 contre 32 Mpb, 7,6e-5 contre 3,2 Gpb et 0,004 contre
+320 Gpb. Il n'y a donc pas lieu de rogner.
 """
 
 import argparse
-import re
+import os
 import subprocess
 import sys
-from collections import defaultdict
-
-# Longueur minimale utile. Il n'y a PLUS de plafond par défaut : les
-# chromosomes et génomes d'organites sont les bienvenus, c'est le budget par
-# espèce qui borne le volume.
-MIN_LEN = 200
-
-# Budget par espèce, en bases. On prend les séquences par ordre de préférence
-# jusqu'à l'épuiser. C'est ce qui remplace l'ancien « une seule séquence » :
-# ce plafond-là rendait invisible tout ce qui n'était pas le marqueur, et une
-# séquence prise ailleurs dans le génome ne donnait aucun hit.
-DEFAULT_BUDGET = 20_000
-PRIORITY_BUDGET = 300_000_000   # pour les organismes de la démonstration
-
-# Marqueurs classiques de code-barres ADN, par ordre de préférence.
-PREFERRED = [
-    r"cytochrome c oxidase subunit (?:1|I)\b", r"\bCOI\b", r"\bCOX1\b",
-    r"ribulose.*carboxylase", r"\brbcL\b", r"\bmatK\b",
-    r"internal transcribed spacer", r"\bITS\b",
-    r"16S ribosomal RNA", r"18S ribosomal RNA", r"28S ribosomal RNA",
-    r"cytochrome b\b", r"\bcytb\b",
-]
-PREFERRED_RE = [re.compile(p, re.I) for p in PREFERRED]
-
-# On n'écarte plus le génomique : c'est précisément ce qui manquait. Seuls
-# restent bannis les enregistrements sans intérêt pour une identification.
-REJECT_RE = re.compile(r"unverified|clone library", re.I)
 
 
-# Après les marqueurs, on privilégie les organites : mitochondrie et
-# chloroplaste sont petits, très séquencés, et couvrent beaucoup de terrain.
-ORGANELLE_RE = re.compile(r"mitochondri|chloroplast|plastid", re.I)
+def human(n):
+    for unit in ("pb", "kpb", "Mpb", "Gpb"):
+        if n < 1000:
+            return f"{n:,.1f} {unit}"
+        n /= 1000
+    return f"{n:,.1f} Tpb"
 
 
-def rank(title, length):
-    """Note une séquence : plus c'est bas, mieux c'est."""
-    if REJECT_RE.search(title):
-        return (99, 0)
-    for i, rx in enumerate(PREFERRED_RE):
-        if rx.search(title):
-            return (i, abs(length - 800))
-    n = len(PREFERRED_RE)
-    if ORGANELLE_RE.search(title):
-        return (n, -length)          # organite : le plus complet d'abord
-    return (n + 1, -length)          # le reste : le plus long d'abord
-
-
-def main():
-    ap = argparse.ArgumentParser(
-        description="Extrait de nt les séquences des espèces imagées")
-    ap.add_argument("--db", required=True, help="chemin de la banque nt")
-    ap.add_argument("--taxids", default="taxids.txt")
-    ap.add_argument("--priority", default="priority_taxids.txt",
-                    help="taxons de la démonstration, servis largement")
-    ap.add_argument("--out", default="biodetective_subset.fasta")
-    ap.add_argument("--budget", type=int, default=DEFAULT_BUDGET,
-                    help="bases par espèce ordinaire")
-    ap.add_argument("--priority-budget", type=int, default=PRIORITY_BUDGET,
-                    help="bases par espèce de la démonstration")
-    ap.add_argument("--survey", action="store_true",
-                    help="ne rien extraire, seulement mesurer le volume")
-    args = ap.parse_args()
-
-    wanted = {l.strip() for l in open(args.taxids) if l.strip()}
-    priority = set()
-    if os.path.exists(args.priority):
-        priority = {l.strip() for l in open(args.priority) if l.strip()}
-    print(f"{len(wanted)} taxons demandés, dont {len(priority)} prioritaires",
-          flush=True)
-    print(f"budget : {args.budget:,} b par espèce, "
-          f"{args.priority_budget:,} b pour les prioritaires", flush=True)
-
-    print("Inventaire des séquences disponibles (plusieurs minutes)…",
-          flush=True)
-    cmd = ["blastdbcmd", "-db", args.db, "-taxidlist", args.taxids,
-           "-outfmt", "%a\t%T\t%l\t%t"]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True,
-                            errors="replace")
-
-    cands = defaultdict(list)
-    seen = available = 0
+def survey(db, taxids):
+    """Mesure le volume disponible sans rien extraire."""
+    print("Inventaire (plusieurs minutes sur nt)…", flush=True)
+    proc = subprocess.Popen(
+        ["blastdbcmd", "-db", db, "-taxidlist", taxids, "-outfmt", "%T\t%l"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        errors="replace")
+    n = total = 0
+    species = set()
+    longest = 0
     for line in proc.stdout:
-        parts = line.rstrip("\n").split("\t", 3)
-        if len(parts) < 4:
+        p = line.split("\t")
+        if len(p) < 2:
             continue
-        acc, taxid, length, title = parts
-        seen += 1
-        if seen % 1000000 == 0:
-            print(f"  {seen:,} séquences examinées, "
-                  f"{len(cands):,} espèces vues", flush=True)
         try:
-            length = int(length)
+            length = int(p[1])
         except ValueError:
             continue
-        if length < MIN_LEN or taxid not in wanted:
-            continue
-        r = rank(title, length)
-        if r[0] >= 99:
-            continue
-        available += length
-        cands[taxid].append((r, acc, length))
-
+        n += 1
+        total += length
+        longest = max(longest, length)
+        species.add(p[0])
+        if n % 1000000 == 0:
+            print(f"  {n:,} séquences, {human(total)}", flush=True)
     proc.wait()
     if proc.returncode != 0:
         print(f"blastdbcmd a échoué : {proc.stderr.read()[:500]}",
               file=sys.stderr)
         return 1
-    print(f"{seen:,} séquences examinées ; {available/1e9:.1f} Gpb "
-          f"disponibles pour {len(cands):,} espèces", flush=True)
-
-    # Sélection sous budget, séquences les mieux notées d'abord.
-    chosen, total = [], 0
-    for taxid, lst in cands.items():
-        lst.sort()
-        budget = args.priority_budget if taxid in priority else args.budget
-        used = 0
-        for _r, acc, length in lst:
-            if used and used + length > budget:
-                continue
-            chosen.append(acc)
-            used += length
-            if used >= budget:
-                break
-        total += used
-
-    print(f"\n{len(chosen):,} séquences retenues, {total/1e6:,.0f} Mpb")
+    print("-" * 55)
+    print(f"{n:,} séquences")
+    print(f"{len(species):,} taxons")
+    print(f"{human(total)} au total")
+    print(f"séquence la plus longue : {human(longest)}")
+    print(f"\nFASTA attendu : ~{total/1e9:.1f} Go sur disque")
     print(f"E-value attendue pour 24 pb : ~{1.06e-6 * (total/32e6):.1e}")
-    if args.survey:
-        print("\n(--survey : rien n'a été extrait)")
-        return 0
+    return 0
 
-    with open("chosen_accessions.txt", "w") as fh:
-        fh.write("\n".join(chosen) + "\n")
 
-    print("\nExtraction du FASTA…", flush=True)
-    n = written = 0
-    with open(args.out, "w") as out:
-        p2 = subprocess.Popen(
-            ["blastdbcmd", "-db", args.db, "-entry_batch",
-             "chosen_accessions.txt", "-outfmt", "%a\t%T\t%s"],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            errors="replace")
-        for line in p2.stdout:
+def extract(db, taxids, out, min_length):
+    """Écrit toutes les séquences des taxons demandés, sans plafond."""
+    print(f"Extraction depuis {db}…", flush=True)
+    proc = subprocess.Popen(
+        ["blastdbcmd", "-db", db, "-taxidlist", taxids,
+         "-outfmt", "%a\t%T\t%s"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        errors="replace")
+
+    n = skipped = total = 0
+    species = set()
+    with open(out, "w") as fh:
+        for line in proc.stdout:
             p = line.rstrip("\n").split("\t")
             if len(p) < 3:
                 continue
             acc, taxid, seq = p[0], p[1], p[2]
-            out.write(f">{taxid}|{acc}\n{seq}\n")
+            if len(seq) < min_length:
+                skipped += 1
+                continue
+            fh.write(f">{taxid}|{acc}\n{seq}\n")
             n += 1
-            written += len(seq)
-            if n % 20000 == 0:
-                print(f"  {n:,} séquences écrites", flush=True)
-        p2.wait()
+            total += len(seq)
+            species.add(taxid)
+            if n % 100000 == 0:
+                print(f"  {n:,} séquences, {human(total)}", flush=True)
+    proc.wait()
+    if proc.returncode != 0:
+        print(f"blastdbcmd a échoué : {proc.stderr.read()[:500]}",
+              file=sys.stderr)
+        return 1
 
+    size = os.path.getsize(out)
     print("-" * 55)
-    print(f"{n:,} séquences, {written/1e6:,.0f} Mpb -> {args.out}")
-    print(f"\nÀ rapatrier, puis : python3 prepare_blastdb.py "
-          f"--fasta {args.out}")
+    print(f"{n:,} séquences, {len(species):,} taxons, {human(total)}")
+    if skipped:
+        print(f"{skipped:,} séquences ignorées (< {min_length} pb)")
+    print(f"{out} : {size/1e9:.2f} Go")
+    print(f"E-value attendue pour 24 pb : ~{1.06e-6 * (total/32e6):.1e}")
+    print(f"\nÀ rapatrier, puis sur la machine de démonstration :")
+    print(f"    python3 prepare_blastdb.py --fasta {os.path.basename(out)}")
     return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Extrait de nt toutes les séquences des taxons imagés")
+    ap.add_argument("--db", required=True, help="chemin de la banque nt")
+    ap.add_argument("--taxids", default="taxids.txt")
+    ap.add_argument("--out", default="biodetective_subset.fasta")
+    ap.add_argument("--min-length", type=int, default=0,
+                    help="ignorer les séquences plus courtes (0 = tout garder)")
+    ap.add_argument("--survey", action="store_true",
+                    help="mesurer le volume sans rien extraire")
+    args = ap.parse_args()
+
+    if not os.path.exists(args.taxids):
+        print(f"{args.taxids} introuvable.", file=sys.stderr)
+        return 1
+    n = sum(1 for l in open(args.taxids) if l.strip())
+    print(f"{n:,} taxons demandés")
+
+    if args.survey:
+        return survey(args.db, args.taxids)
+    return extract(args.db, args.taxids, args.out, args.min_length)
 
 
 if __name__ == "__main__":

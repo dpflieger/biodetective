@@ -68,30 +68,48 @@ pour un enfant qui improvise.
 
 ```bash
 # 1. sur le serveur qui héberge nt
-python3 extract_from_nt.py --db /chemin/vers/nt --taxids taxids.txt
-#    -> un FASTA d'une quarantaine de mégaoctets, à rapatrier
+python3 extract_from_nt.py --db /chemin/vers/nt --survey   # mesurer d'abord
+python3 extract_from_nt.py --db /chemin/vers/nt            # extraire
+#    -> biodetective_subset.fasta, à rapatrier
 
 # 2. sur la machine de démonstration
-python3 prepare_blastdb.py --fasta taxids.fasta   # nettoie puis makeblastdb
-python3 make_strips.py --length 24                # brins réels, vérifiés par BLAST
-python3 validate_sequences.py                     # contrôle avant démo
+python3 prepare_blastdb.py --fasta biodetective_subset.fasta
+python3 make_strips.py --length 24
+python3 validate_sequences.py
 ```
 
-`prepare_blastdb.py` n'est pas une commodité : `blastdbcmd -taxidlist` descend
-dans la hiérarchie et rapporte des sous-espèces dont le taxid n'existe pas dans
+`extract_from_nt.py` prend **tout** ce que nt contient pour nos taxons : aucun
+plafond de longueur, aucune sélection par marqueur, aucun quota par espèce.
+C'est un petit nt restreint à notre liste de taxid.
+
+**Pourquoi aucun plafond.** La première version n'en gardait qu'une séquence par
+espèce, pour protéger la E-value. C'était une erreur : la banque ne contenait
+pour *Arabidopsis* qu'un ADNc de 785 pb, soit 0,00058 % de ses 135 Mpb, et une
+séquence prise ailleurs dans le génome ne donnait **aucun hit**. La mesure
+montre qu'il n'y avait rien à protéger — E-value pour 24 pb, taille simulée
+avec `-dbsize` :
+
+| Banque | E (24 pb) | E (34 pb) |
+|--------|-----------|-----------|
+| 32 Mpb | 1,1 × 10⁻⁶ | 2,2 × 10⁻¹² |
+| 3,2 Gpb | 7,6 × 10⁻⁵ | 1,9 × 10⁻¹⁰ |
+| 320 Gpb | 0,004 | 1,5 × 10⁻⁸ |
+
+Dix mille fois plus gros, et un brin de 24 briques reste exploitable. **Ne pas
+réintroduire de plafond** sans refaire cette mesure.
+
+`prepare_blastdb.py` reste indispensable : `blastdbcmd -taxidlist` descend dans
+la hiérarchie et rapporte des sous-espèces dont le taxid n'existe pas dans
 `biodetective.db`. Un hit sur l'une d'elles ne trouverait aucune fiche et serait
 écarté, alors que c'est souvent la bonne réponse. Le script les rattache à leur
-ancêtre présent en base via `nodes.dmp`, et retire ce qui ne se rattache à rien.
+ancêtre via `nodes.dmp`.
 
 ### La banque en service
 
-| | |
-|---|---|
-| Séquences | 44 772 |
-| Espèces | 21 489 sur 25 545 (**84 %**) |
-| Taille | **32,0 Mpb** |
-| Rattachées à l'espèce parente | 545 |
-| E-value pour 24 pb | **~1,1 × 10⁻⁶** |
+Provisoire, issue de la première extraction plafonnée : **44 772 séquences,
+21 489 espèces, 32,0 Mpb**. Elle fait tourner les 31 brins préparés, mais ne
+contient qu'un marqueur par espèce — une séquence prise ailleurs dans un génome
+n'y trouve rien. À remplacer par l'extraction sans plafond.
 
 ### Brins préparés : 31 sur 33
 
