@@ -16,6 +16,7 @@ La banque doit avoir été construite au préalable :
 
 import asyncio
 import os
+from datetime import datetime
 import shutil
 import subprocess
 import sys
@@ -67,6 +68,11 @@ MAX_HITS = 50
 MIN_IDENTITY = 85.0
 MIN_COVERAGE = 80.0
 
+# Chaque analyse laisse une trace vérifiable : la commande exacte, le tableau
+# que l'application a réellement lu, et le rapport détaillé de blastn. Mettre
+# BIODETECTIVE_BLAST_RESULTS à vide désactive l'archivage.
+RESULTS_DIR = os.environ.get("BIODETECTIVE_BLAST_RESULTS", "blast_results")
+
 _FIELDS = ("sseqid pident length mismatch gapopen qstart qend "
            "sstart send evalue bitscore qseq sseq qlen")
 
@@ -77,6 +83,70 @@ def blast_available():
 
 def db_available():
     return os.path.exists(BLAST_DB + ".nin") or os.path.exists(BLAST_DB + ".nal")
+
+
+def _write_archive(archive_id, sequence, cmd, table, report):
+    """Dépose le résultat brut dans RESULTS_DIR. Ne lève jamais.
+
+    L'archivage ne doit sous aucun prétexte faire échouer une analyse en
+    cours devant un enfant : toute erreur d'écriture est avalée.
+    """
+    if not RESULTS_DIR:
+        return None
+    try:
+        os.makedirs(RESULTS_DIR, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        path = os.path.join(RESULTS_DIR, f"{stamp}_{archive_id[:8]}.txt")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(f"# BioDetective — analyse du "
+                     f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            fh.write(f"# job      : {archive_id}\n")
+            fh.write(f"# requete  : {sequence} ({len(sequence)} pb)\n")
+            fh.write(f"# banque   : {BLAST_DB}\n")
+            fh.write(f"# commande : {' '.join(cmd)}\n")
+            fh.write("\n===== Tableau lu par l'application (outfmt 6) =====\n")
+            fh.write("# " + "\t".join(_FIELDS.split()) + "\n")
+            fh.write(table or "(aucun hit)\n")
+            if report:
+                fh.write("\n===== Rapport blastn detaille (outfmt 0) =====\n")
+                fh.write(report)
+        return path
+    except OSError:
+        return None
+
+
+INDEX_COLUMNS = ("date", "job", "sequence", "resultat", "taxid",
+                 "identite", "couverture", "evalue", "score", "fichier")
+
+
+def append_index(row):
+    """Ajoute une ligne au récapitulatif TSV, pour parcourir la journée
+    sans ouvrir les fichiers un par un."""
+    if not RESULTS_DIR:
+        return
+    try:
+        os.makedirs(RESULTS_DIR, exist_ok=True)
+        path = os.path.join(RESULTS_DIR, "index.tsv")
+        new = not os.path.exists(path)
+        with open(path, "a", encoding="utf-8") as fh:
+            if new:
+                fh.write("\t".join(INDEX_COLUMNS) + "\n")
+            fh.write("\t".join(str(row.get(c, "")) for c in INDEX_COLUMNS)
+                     + "\n")
+    except OSError:
+        pass
+
+
+def append_verdict(path, text):
+    """Ajoute la conclusion de l'application au fichier archivé."""
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write("\n===== Verdict de l'application =====\n")
+            fh.write(text.rstrip() + "\n")
+    except OSError:
+        pass
 
 
 def _parse(stdout):
@@ -128,17 +198,17 @@ def is_confident(hit):
             and hit["coverage"] >= MIN_COVERAGE)
 
 
-def _cmd(query_path):
+def _cmd(query_path, outfmt="6 " + _FIELDS):
     return [
         BLASTN, "-task", TASK, "-query", query_path, "-db", BLAST_DB,
         "-evalue", str(EVALUE), "-max_target_seqs", str(MAX_HITS),
         "-num_threads", "4", "-dust", "no", "-soft_masking", "false",
-        "-outfmt", "6 " + _FIELDS,
+        "-outfmt", outfmt,
     ]
 
 
-async def search(sequence, workdir="/tmp"):
-    """Lance blastn en tâche de fond et retourne la liste des hits."""
+async def search(sequence, workdir="/tmp", archive_id=None):
+    """Lance blastn en tâche de fond et retourne (hits, chemin d'archive)."""
     if not blast_available():
         raise RuntimeError(
             "blastn est introuvable. Installer BLAST+ "
@@ -152,15 +222,35 @@ async def search(sequence, workdir="/tmp"):
     path = os.path.join(workdir, f"bd_query_{os.getpid()}_{id(sequence)}.fa")
     with open(path, "w") as fh:
         fh.write(f">requete\n{sequence}\n")
-    try:
+    async def run(cmd):
         proc = await asyncio.create_subprocess_exec(
-            *_cmd(path), stdout=asyncio.subprocess.PIPE,
+            *cmd, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE)
         out, err = await proc.communicate()
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"blastn a échoué : {err.decode('utf-8', 'replace')[:300]}")
-        return _parse(out.decode("utf-8", "replace"))
+        return proc.returncode, out.decode("utf-8", "replace"), err.decode(
+            "utf-8", "replace")
+
+    try:
+        cmd = _cmd(path)
+        archiving = bool(archive_id and RESULTS_DIR)
+
+        # Le rapport lisible demande un second appel : blastn n'émet qu'un
+        # format à la fois. Les deux sont indépendants, donc lancés
+        # ensemble — en série ils coûtaient 584 ms au lieu de 315.
+        if archiving:
+            (rc, table, err), (rc2, report, _e2) = await asyncio.gather(
+                run(cmd), run(_cmd(path, outfmt="0")))
+        else:
+            rc, table, err = await run(cmd)
+            rc2, report = 1, None
+
+        if rc != 0:
+            raise RuntimeError(f"blastn a échoué : {err[:300]}")
+
+        archive = _write_archive(archive_id, sequence, cmd, table,
+                                 report if rc2 == 0 else None) \
+            if archiving else None
+        return _parse(table), archive
     finally:
         try:
             os.unlink(path)
@@ -177,7 +267,7 @@ def search_sync(sequence, workdir="/tmp"):
         r = subprocess.run(_cmd(path), capture_output=True, text=True)
         if r.returncode != 0:
             raise RuntimeError(f"blastn a échoué : {r.stderr[:300]}")
-        return _parse(r.stdout)
+        return _parse(r.stdout)   # sans archivage : usage scripts et tests
     finally:
         try:
             os.unlink(path)

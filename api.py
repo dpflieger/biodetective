@@ -213,6 +213,7 @@ def record_history(job):
         "analysis_time": job.get("analysis_time"),
         "organism": o,
         "blast": job.get("blast"),
+        "blast_archive": job.get("blast_archive"),
     }
     state.history.insert(0, entry)
     del state.history[HISTORY_MAX:]
@@ -415,7 +416,9 @@ async def run_analysis(job_id: str, sequence: str):
     try:
         await asyncio.sleep(job["planned_duration"])
 
-        hits = await blast_search.search(sequence)
+        hits, archive = await blast_search.search(
+            sequence, archive_id=job_id)
+        job["blast_archive"] = archive
 
         # Une fiche par taxon touché, en une seule requête SQL.
         fiches = organisms_by_taxid([h["taxonomy_id"] for h in hits[:10]])
@@ -467,11 +470,39 @@ async def run_analysis(job_id: str, sequence: str):
             }
             job.update(status="completed", matched=True,
                        organism=fiches[best["taxonomy_id"]])
+            blast_search.append_verdict(archive,
+                f"Organisme retenu : "
+                f"{fiches[best['taxonomy_id']]['scientific_name']} "
+                f"(taxid {best['taxonomy_id']}, {best['accession']})\n"
+                f"Identite {best['percent_identity']} %, "
+                f"couverture {best['coverage']} %, E {best['evalue']:.3g}, "
+                f"score {best['bitscore']}")
+            blast_search.append_index({
+                "date": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "job": job_id[:8], "sequence": sequence,
+                "resultat": fiches[best["taxonomy_id"]]["scientific_name"],
+                "taxid": best["taxonomy_id"],
+                "identite": best["percent_identity"],
+                "couverture": best["coverage"],
+                "evalue": f"{best['evalue']:.3g}",
+                "score": best["bitscore"],
+                "fichier": os.path.basename(archive) if archive else "",
+            })
             log.info("[%s] %s -> %s  id %.1f%%  E %.2g", job_id[:8], sequence,
                      fiches[best["taxonomy_id"]]["scientific_name"],
                      best["percent_identity"], best["evalue"])
         else:
             job.update(status="completed", matched=False, organism=None)
+            blast_search.append_verdict(archive,
+                f"Aucun hit juge sur (seuils : identite "
+                f"{blast_search.MIN_IDENTITY} %, couverture "
+                f"{blast_search.MIN_COVERAGE} %). {len(hits)} hits bruts.")
+            blast_search.append_index({
+                "date": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "job": job_id[:8], "sequence": sequence,
+                "resultat": "SEQUENCE INCONNUE",
+                "fichier": os.path.basename(archive) if archive else "",
+            })
             log.info("[%s] %s -> aucun hit sûr (%d hits bruts)",
                      job_id[:8], sequence, len(hits))
     except Exception as exc:                      # noqa: BLE001

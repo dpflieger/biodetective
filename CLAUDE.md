@@ -591,6 +591,37 @@ image via `/api/random-images` : dégradé mais fonctionnel.
 
 ---
 
+### Traces BLAST vérifiables
+
+Chaque analyse dépose un fichier dans `blast_results/` :
+
+```
+blast_results/
+├── index.tsv                       # récapitulatif, une ligne par analyse
+├── 20260825-164422_d7b426f2.txt
+└── …
+```
+
+Chaque fichier contient, dans l'ordre :
+
+1. l'en-tête — date, job, requête, banque, **la commande blastn exacte** ;
+2. le tableau `outfmt 6` que l'application a réellement lu ;
+3. le rapport `outfmt 0` complet, avec alignements et paramètres de
+   Karlin-Altschul ;
+4. le verdict de l'application, avec les seuils appliqués.
+
+C'est du blastn brut, pas notre restitution : on peut donc contrôler ce que
+l'application a décidé, et rejouer la commande à l'identique.
+
+`blastn` n'émet qu'un format à la fois, d'où deux appels. Ils sont **lancés en
+parallèle** : 286 ms au lieu de 584 ms en série, soit 17 ms de plus qu'une
+analyse sans archivage. Compter ~9 ko par analyse, soit 5 Mo pour 500.
+
+`BIODETECTIVE_BLAST_RESULTS=""` désactive l'archivage. Une erreur d'écriture
+n'interrompt jamais une analyse en cours devant un enfant.
+
+---
+
 ### Historique des analyses
 
 Les 40 dernières analyses sont conservées dans `history.json`, **écrit sur
