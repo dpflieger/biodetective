@@ -519,7 +519,11 @@ CREATE TABLE phylogenetic_tree (
 - Photo de l'organisme identifié
 - « 100 % » en gros
 - Fiche descriptive (type, règne, nom commun) — **lignes vides masquées**
-- Crédit photo (source + licence + auteur) — obligatoire pour les licences CC
+- Crédit photo (source + licence + auteur) — **en surimpression, au survol
+  seulement** : il alourdissait un écran qui doit d'abord montrer un organisme.
+  Positionné hors du flux, pour que son apparition ne déplace rien. `focus-within`
+  et `tabindex` le rendent atteignable au clavier, faute de souris.
+  Les licences CC demandent l'attribution : la garder accessible, jamais la retirer
 - Bouton « Nouvelle Analyse »
 
 ### Écran « Séquence inconnue »

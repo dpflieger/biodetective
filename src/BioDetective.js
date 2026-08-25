@@ -669,7 +669,11 @@ export default function BioDetective() {
     return (
       <div className="screen screen--result">
         <div className="result__grid">
-          <div className="result__photo">
+          <div
+            className="result__photo"
+            tabIndex={0}
+            title="Crédit photo au survol"
+          >
             {!imageLoaded && <div className="result__loading">Chargement de la photo…</div>}
             <img
               src={img ? img.url : PLACEHOLDER}
