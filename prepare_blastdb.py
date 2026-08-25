@@ -96,8 +96,9 @@ def main():
         emit = False
         for line in src:
             if line.startswith(">"):
-                raw = line[1:].strip()
-                taxid, _, acc = raw.partition("|")
+                raw = line[1:].rstrip("\n")
+                taxid, _, rest = raw.partition("|")
+                acc, _, title = rest.partition(" ")
                 target = resolve(taxid, wanted, parents, cache)
                 if target is None:
                     emit = False
@@ -108,7 +109,8 @@ def main():
                 if target != taxid:
                     remapped += 1
                 species.add(target)
-                dst.write(f">{target}|{acc}\n")
+                dst.write(f">{target}|{acc}"
+                          + (f" {title}" if title else "") + "\n")
             elif emit:
                 dst.write(line)
                 total_bp += len(line.strip())

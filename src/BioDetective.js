@@ -116,6 +116,10 @@ function DnaStrip({ sequence, size = 'normal' }) {
   );
 }
 
+/** Sépare les milliers par une espace fine, comme il se doit en français. */
+const fmt = (n) =>
+  typeof n === 'number' ? n.toLocaleString('fr-FR') : n;
+
 /** Alignement BLAST, présenté comme dans un vrai rapport.
 
    Chaque base de la requête est colorée en vert si elle correspond, en
@@ -135,6 +139,22 @@ function Alignment({ data }) {
             : 'correspondance parfaite'}
         </span>
       </div>
+      {(data.locus || data.subject_length) && (
+        <div className="locus">
+          <span className="locus__where">
+            {data.locus || 'Séquence de référence'}
+          </span>
+          <span className="locus__pos">
+            position {fmt(data.subject_start)}
+            {' – '}
+            {fmt(data.subject_end)}
+            {data.subject_length
+              ? ` sur ${fmt(data.subject_length)} bases`
+              : ''}
+            {data.strand === 'moins' ? ' · brin complémentaire' : ''}
+          </span>
+        </div>
+      )}
       <div className="align__body">
         <div className="align__row">
           <span className="align__label">Ta séquence</span>

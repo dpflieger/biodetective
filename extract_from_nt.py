@@ -12,9 +12,10 @@ liste de taxid. Aucun plafond, aucune sélection.
 
 Ne nécessite que blastdbcmd et python3.
 
-Le taxid est écrit dans l'identifiant FASTA (`>taxid|accession`), pour que la
-machine de démonstration n'ait besoin d'aucun fichier de taxonomie pour relier
-un hit à sa fiche.
+Le taxid est écrit dans l'identifiant FASTA (`>taxid|accession description`),
+pour que la machine de démonstration n'ait besoin d'aucun fichier de taxonomie
+pour relier un hit à sa fiche. La description est conservée : c'est elle qui
+permet d'annoncer « chromosome 1 » plutôt qu'un numéro d'accession nu.
 
 Note de dimensionnement : la E-value est proportionnelle à la taille de la
 banque, mais la marge est confortable. Mesuré avec -dbsize, un brin de
@@ -80,7 +81,7 @@ def extract(db, taxids, out, min_length):
     print(f"Extraction depuis {db}…", flush=True)
     proc = subprocess.Popen(
         ["blastdbcmd", "-db", db, "-taxidlist", taxids,
-         "-outfmt", "%a\t%T\t%s"],
+         "-outfmt", "%a\t%T\t%t\t%s"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         errors="replace")
 
@@ -88,14 +89,18 @@ def extract(db, taxids, out, min_length):
     species = set()
     with open(out, "w") as fh:
         for line in proc.stdout:
-            p = line.rstrip("\n").split("\t")
-            if len(p) < 3:
+            p = line.rstrip("\n").split("\t", 3)
+            if len(p) < 4:
                 continue
-            acc, taxid, seq = p[0], p[1], p[2]
+            acc, taxid, title, seq = p
             if len(seq) < min_length:
                 skipped += 1
                 continue
-            fh.write(f">{taxid}|{acc}\n{seq}\n")
+            # Le titre est conservé : c'est lui qui dira « chromosome 1 »
+            # plutôt qu'un simple numéro d'accession, et sans lui la position
+            # rendue par BLAST ne se rapporte à rien de nommable.
+            title = title.replace("\t", " ").strip()
+            fh.write(f">{taxid}|{acc} {title}\n{seq}\n")
             n += 1
             total += len(seq)
             species.add(taxid)

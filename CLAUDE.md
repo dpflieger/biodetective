@@ -609,6 +609,33 @@ image via `/api/random-images` : dégradé mais fonctionnel.
 
 ---
 
+### Localisation du hit
+
+L'écran de résultat annonce **où** la séquence a été trouvée : type de molécule,
+position et brin.
+
+> génome chloroplastique — position 90 001 – 90 034 sur 154 478 bases
+
+La position vient directement de `sstart`/`send` : elle a toujours été dans la
+sortie de BLAST. Ce qui manquait, c'était de savoir **dans quoi** : l'extraction
+écrivait `>taxid|accession` et **jetait la description**. Le titre est désormais
+conservé (`>taxid|accession description`), demandé à BLAST via `stitle`, et
+`describe_locus()` en tire une étiquette lisible : « chromosome 1 », « génome
+mitochondrial », « génome chloroplastique », « plasmide … ». Sans description
+reconnaissable, la ligne n'est simplement pas affichée.
+
+`sstart > send` signale un alignement sur le brin complémentaire, indiqué comme
+tel. Vérifié sur le chloroplaste d'*Arabidopsis* : un fragment pris en 90 001
+ressort en 90 001–90 034 sur le brin plus, et **une seconde fois en
+148 648–148 615 sur le brin moins** — la répétition inversée du chloroplaste.
+Le comportement est correct, et l'exemple est joli à montrer.
+
+⚠️ Cela ne fonctionne que si la banque contient des enregistrements
+génomiques. Avec l'ancienne extraction plafonnée à un marqueur par espèce, les
+positions se rapportaient à un ADNc de 785 pb et n'apprenaient rien.
+
+---
+
 ### Traces BLAST vérifiables
 
 Chaque analyse dépose un fichier dans `blast_results/` :

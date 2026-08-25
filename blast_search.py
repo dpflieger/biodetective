@@ -17,6 +17,7 @@ La banque doit avoir été construite au préalable :
 import asyncio
 import os
 from datetime import datetime
+import re
 import shutil
 import subprocess
 import sys
@@ -74,7 +75,7 @@ MIN_COVERAGE = 80.0
 RESULTS_DIR = os.environ.get("BIODETECTIVE_BLAST_RESULTS", "blast_results")
 
 _FIELDS = ("sseqid pident length mismatch gapopen qstart qend "
-           "sstart send evalue bitscore qseq sseq qlen")
+           "sstart send evalue bitscore qseq sseq qlen slen stitle")
 
 
 def blast_available():
@@ -83,6 +84,31 @@ def blast_available():
 
 def db_available():
     return os.path.exists(BLAST_DB + ".nin") or os.path.exists(BLAST_DB + ".nal")
+
+
+# Repère le type de molécule dans la description NCBI, pour dire à un enfant
+# « chromosome 1 » ou « ADN du chloroplaste » plutôt qu'un numéro d'accession.
+LOCUS_PATTERNS = [
+    (re.compile(r"\bchromosome\s+(\w+)", re.I), "chromosome {}"),
+    (re.compile(r"\blinkage group\s+(\w+)", re.I), "groupe de liaison {}"),
+    (re.compile(r"\bmitochondri", re.I), "génome mitochondrial"),
+    (re.compile(r"\bchloroplast|\bplastid", re.I), "génome chloroplastique"),
+    (re.compile(r"\bplasmid\s+(\S+)", re.I), "plasmide {}"),
+    (re.compile(r"\bscaffold\s+(\S+)", re.I), "scaffold {}"),
+    (re.compile(r"\bcontig\s+(\S+)", re.I), "contig {}"),
+    (re.compile(r"\bcomplete genome", re.I), "génome complet"),
+]
+
+
+def describe_locus(title):
+    """Nomme la molécule touchée. None si la description ne dit rien."""
+    if not title:
+        return None
+    for rx, label in LOCUS_PATTERNS:
+        m = rx.search(title)
+        if m:
+            return label.format(*m.groups()) if m.groups() else label
+    return None
 
 
 def _write_archive(archive_id, sequence, cmd, table, report):
@@ -166,6 +192,13 @@ def _parse(stdout):
             continue
         qlen = int(p[13]) or 1
         length = int(p[2])
+        slen = int(p[14]) if len(p) > 14 and p[14].isdigit() else None
+        # stitle peut contenir des tabulations : on reprend tout le reste.
+        stitle = "\t".join(p[15:]).strip() if len(p) > 15 else ""
+        # blastdbcmd recopie parfois l'identifiant en tête du titre.
+        if stitle.startswith(sseqid):
+            stitle = stitle[len(sseqid):].strip()
+        sstart, send = int(p[7]), int(p[8])
         hits.append({
             "taxonomy_id": taxid,
             "accession": accession or sseqid,
@@ -174,7 +207,13 @@ def _parse(stdout):
             "mismatches": int(p[3]),
             "gaps": int(p[4]),
             "query_start": int(p[5]), "query_end": int(p[6]),
-            "subject_start": int(p[7]), "subject_end": int(p[8]),
+            "subject_start": sstart,
+            "subject_end": send,
+            "subject_length": slen,
+            "subject_title": stitle,
+            # sstart > send : l'alignement est sur le brin complémentaire.
+            "strand": "moins" if sstart > send else "plus",
+            "locus": describe_locus(stitle),
             "evalue": float(p[9]),
             "bitscore": float(p[10]),
             "query_seq": p[11],

@@ -527,6 +527,24 @@ body {
   color: var(--color-secondary);
 }
 
+.locus {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  padding: 0.55rem 1rem;
+  border-bottom: var(--border);
+  font-size: 0.88rem;
+}
+
+.locus__where { color: var(--color-primary); letter-spacing: 0.06em; }
+
+.locus__pos {
+  color: var(--color-muted);
+  font-family: 'Courier New', monospace;
+  font-size: 0.82rem;
+}
+
 /* L'alignement ne doit jamais faire déborder la page : c'est lui qui
    défile, pas le document. */
 .align__body {
