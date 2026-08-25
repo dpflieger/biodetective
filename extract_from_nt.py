@@ -37,16 +37,27 @@ def human(n):
     return f"{n:,.1f} Tpb"
 
 
-def survey(db, taxids):
-    """Mesure le volume disponible sans rien extraire."""
-    print("Inventaire (plusieurs minutes sur nt)…", flush=True)
+# Plafonds proposés lors de l'inventaire, en bases par espèce.
+SURVEY_CAPS = [50_000, 200_000, 1_000_000, 5_000_000, 20_000_000,
+               100_000_000, 500_000_000, None]
+
+
+def survey(db, taxids, priority):
+    """Mesure le volume disponible et simule plusieurs plafonds.
+
+    Ne lit que les métadonnées, jamais les séquences : bien plus rapide que
+    l'extraction, et suffisant pour choisir un plafond en connaissance de
+    cause plutôt qu'au jugé.
+    """
+    print("Inventaire des métadonnées (plusieurs minutes sur nt)…",
+          flush=True)
     proc = subprocess.Popen(
         ["blastdbcmd", "-db", db, "-taxidlist", taxids, "-outfmt", "%T\t%l"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         errors="replace")
-    n = total = 0
-    species = set()
-    longest = 0
+
+    per_taxid = {}
+    n = total = longest = 0
     for line in proc.stdout:
         p = line.split("\t")
         if len(p) < 2:
@@ -55,37 +66,71 @@ def survey(db, taxids):
             length = int(p[1])
         except ValueError:
             continue
+        taxid = p[0]
         n += 1
         total += length
         longest = max(longest, length)
-        species.add(p[0])
-        if n % 1000000 == 0:
+        per_taxid[taxid] = per_taxid.get(taxid, 0) + length
+        if n % 2000000 == 0:
             print(f"  {n:,} séquences, {human(total)}", flush=True)
     proc.wait()
     if proc.returncode != 0:
         print(f"blastdbcmd a échoué : {proc.stderr.read()[:500]}",
               file=sys.stderr)
         return 1
-    print("-" * 55)
-    print(f"{n:,} séquences")
-    print(f"{len(species):,} taxons")
-    print(f"{human(total)} au total")
+
+    print("-" * 62)
+    print(f"{n:,} séquences, {len(per_taxid):,} taxons, {human(total)}")
     print(f"séquence la plus longue : {human(longest)}")
-    print(f"\nFASTA attendu : ~{total/1e9:.1f} Go sur disque")
-    print(f"E-value attendue pour 24 pb : ~{1.06e-6 * (total/32e6):.1e}")
+
+    # Les quelques espèces qui pèsent le plus lourd : ce sont elles qui
+    # décident du volume final.
+    top = sorted(per_taxid.items(), key=lambda kv: -kv[1])[:8]
+    print("\nEspèces les plus volumineuses :")
+    for taxid, v in top:
+        print(f"    taxid {taxid:<10} {human(v)}")
+
+    print("\nVolume selon le plafond par espèce :")
+    print(f"    {'plafond':>14}  {'total':>12}  {'E (24 pb)':>11}  "
+          f"{'FASTA':>9}")
+    for cap in SURVEY_CAPS:
+        vol = sum(min(v, cap) if cap else v for v in per_taxid.values())
+        if priority and cap:
+            # les taxons prioritaires ne sont pas plafonnés
+            vol += sum(max(0, per_taxid.get(t, 0) - cap) for t in priority)
+        e = 1.06e-6 * (vol / 32e6)
+        label = human(cap) if cap else "aucun"
+        print(f"    {label:>14}  {human(vol):>12}  {e:>11.1e}  "
+              f"{vol/1e9:>7.1f} Go")
+    if priority:
+        print(f"\n({len(priority)} taxons prioritaires jamais plafonnés)")
+    print("\nChoisir ensuite : --budget <bases>")
     return 0
 
 
-def extract(db, taxids, out, min_length):
-    """Écrit toutes les séquences des taxons demandés, sans plafond."""
+def extract(db, taxids, out, min_length, budget, priority):
+    """Écrit les séquences des taxons demandés, sous plafond par espèce.
+
+    Le plafond porte sur le total de bases par espèce, pas sur le nombre de
+    séquences : sans lui, quelques organismes très séquencés — l'humain, le
+    maïs, le blé — pèsent à eux seuls des centaines de gigaoctets.
+
+    Les taxons prioritaires (ceux de la démonstration) n'ont pas de plafond :
+    il faut que leur génome entier soit présent pour qu'une séquence prise
+    n'importe où les retrouve.
+    """
     print(f"Extraction depuis {db}…", flush=True)
+    if budget:
+        print(f"plafond : {human(budget)} par espèce, "
+              f"{len(priority)} taxons exemptés", flush=True)
     proc = subprocess.Popen(
         ["blastdbcmd", "-db", db, "-taxidlist", taxids,
          "-outfmt", "%a\t%T\t%t\t%s"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         errors="replace")
 
-    n = skipped = total = 0
+    n = skipped = capped = total = 0
+    used = {}
     species = set()
     with open(out, "w") as fh:
         for line in proc.stdout:
@@ -96,6 +141,12 @@ def extract(db, taxids, out, min_length):
             if len(seq) < min_length:
                 skipped += 1
                 continue
+            if budget and taxid not in priority:
+                spent = used.get(taxid, 0)
+                if spent >= budget:
+                    capped += 1
+                    continue
+                used[taxid] = spent + len(seq)
             # Le titre est conservé : c'est lui qui dira « chromosome 1 »
             # plutôt qu'un simple numéro d'accession, et sans lui la position
             # rendue par BLAST ne se rapporte à rien de nommable.
@@ -116,7 +167,9 @@ def extract(db, taxids, out, min_length):
     print("-" * 55)
     print(f"{n:,} séquences, {len(species):,} taxons, {human(total)}")
     if skipped:
-        print(f"{skipped:,} séquences ignorées (< {min_length} pb)")
+        print(f"{skipped:,} ignorées (< {min_length} pb)")
+    if capped:
+        print(f"{capped:,} écartées par le plafond")
     print(f"{out} : {size/1e9:.2f} Go")
     print(f"E-value attendue pour 24 pb : ~{1.06e-6 * (total/32e6):.1e}")
     print(f"\nÀ rapatrier, puis sur la machine de démonstration :")
@@ -126,25 +179,36 @@ def extract(db, taxids, out, min_length):
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Extrait de nt toutes les séquences des taxons imagés")
+        description="Extrait de nt les séquences des taxons imagés")
     ap.add_argument("--db", required=True, help="chemin de la banque nt")
     ap.add_argument("--taxids", default="taxids.txt")
+    ap.add_argument("--priority", default="priority_taxids.txt",
+                    help="taxons jamais plafonnés (ceux de la démonstration)")
     ap.add_argument("--out", default="biodetective_subset.fasta")
+    ap.add_argument("--budget", type=int, default=5_000_000,
+                    help="bases par espèce ; 0 = aucun plafond")
     ap.add_argument("--min-length", type=int, default=0,
-                    help="ignorer les séquences plus courtes (0 = tout garder)")
+                    help="ignorer les séquences plus courtes")
     ap.add_argument("--survey", action="store_true",
-                    help="mesurer le volume sans rien extraire")
+                    help="mesurer les volumes sans rien extraire")
     args = ap.parse_args()
 
     if not os.path.exists(args.taxids):
         print(f"{args.taxids} introuvable.", file=sys.stderr)
         return 1
     n = sum(1 for l in open(args.taxids) if l.strip())
-    print(f"{n:,} taxons demandés")
+
+    priority = set()
+    if os.path.exists(args.priority):
+        priority = {l.strip() for l in open(args.priority) if l.strip()}
+    else:
+        print(f"({args.priority} absent : aucun taxon exempté de plafond)")
+    print(f"{n:,} taxons demandés, {len(priority)} prioritaires")
 
     if args.survey:
-        return survey(args.db, args.taxids)
-    return extract(args.db, args.taxids, args.out, args.min_length)
+        return survey(args.db, args.taxids, priority)
+    return extract(args.db, args.taxids, args.out, args.min_length,
+                   args.budget, priority)
 
 
 if __name__ == "__main__":
