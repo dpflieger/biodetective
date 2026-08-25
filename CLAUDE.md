@@ -1,8 +1,8 @@
 # CLAUDE.md - Guide de développement BioDetective
 
-## ⚠️ État du projet : BACKEND DE DONNÉES FAIT, API ET FRONTEND À FAIRE
+## ⚠️ État du projet : BACKEND COMPLET, FRONTEND À FAIRE
 
-Ce fichier a d'abord été un cahier des charges. Une partie est maintenant réelle.
+Ce fichier a d'abord été un cahier des charges. Le backend est maintenant réel et testé.
 
 **Fait :**
 - `data_pipeline.py` → `biodetective.db` (25 545 organismes, ~6 s de construction)
@@ -10,8 +10,9 @@ Ce fichier a d'abord été un cahier des charges. Une partie est maintenant rée
 - `sequences.json` → table de correspondance de la démo (33 organismes)
 - `identify.py` → normalisation + recherche exacte
 - `validate_sequences.py` → contrôle avant démo
+- `api.py` → API FastAPI complète, 8 routes, testée de bout en bout
 
-**À faire :** `api.py` (FastAPI), tout le frontend React (`src/`, `public/`, `package.json`).
+**À faire :** tout le frontend React (`src/`, `public/`, `package.json`).
 
 Voir la [Roadmap](#-roadmap-ordre-de-construction) en fin de fichier pour l'ordre de construction.
 
@@ -55,7 +56,7 @@ Biodetective/
 ├── validate_sequences.py    # [FAIT] contrôle avant démo
 ├── biodetective.db          # [GÉNÉRÉ] 25 545 organismes, 11 Mo
 ├── requirements.txt         # [FAIT]
-├── api.py                   # [À FAIRE] API FastAPI
+├── api.py                   # [FAIT] API FastAPI, 8 routes
 ├── package.json             # [À FAIRE] config React (proxy → localhost:8000)
 ├── new_taxdump/             # données NCBI (non versionnées)
 │   ├── names.dmp            # noms scientifiques et communs anglais
@@ -143,6 +144,10 @@ npm start
 | GET | `/analyze/{job_id}` | Récupérer le résultat d'un job |
 | DELETE | `/analyze/{job_id}` | Supprimer un job |
 | GET | `/organism/{taxonomy_id}` | Détails d'un organisme |
+| POST | `/reload` | Recharger `sequences.json` sans redémarrer |
+
+`POST /reload` permet de corriger ou d'ajouter une séquence en pleine journée de démo
+sans couper le service.
 
 > Les routes s'appellent `/analyze` et non `/blast` : il n'y a pas de BLAST derrière.
 
@@ -199,6 +204,16 @@ aux vraies pannes (base illisible, séquence vide, caractères non-ADN).
 
 ### Statuts de job
 `running` → `completed` (avec `matched` true ou false) ou `error`.
+
+Une séquence **invalide** (lettres autres que ATCG, champ vide) ne crée pas de job :
+`POST /analyze` répond directement **400** avec un message affichable tel quel.
+Une séquence **valide mais inconnue** crée bien un job qui aboutit à
+`200 / completed / matched:false`. Ne pas confondre les deux côté React.
+
+### `display_name`
+Chaque organisme renvoyé porte un champ `display_name` : nom français s'il existe,
+sinon nom commun anglais, sinon nom scientifique. Le frontend affiche ce champ sans
+avoir à arbitrer lui-même.
 
 ### Délai artificiel
 
@@ -534,8 +549,8 @@ Idem `Wikimedia Commons` (22 130) vs `Wikimedia  Commons` (double espace, 2) vs
 1. ~~`git init` + `.gitignore`~~ ✅
 2. ~~`data_pipeline.py` → `biodetective.db`~~ ✅
 3. ~~`sequences.json` + `identify.py` + `validate_sequences.py`~~ ✅
-4. `api.py` : `/`, `/stats`, `/organism/{id}` (vérifiables au navigateur)
-5. `api.py` : `/analyze` + polling + `/random-images`
+4. ~~`api.py` : `/`, `/stats`, `/organism/{id}`~~ ✅
+5. ~~`api.py` : `/analyze` + polling + `/random-images`~~ ✅
 6. Frontend : accueil → recherche → résultat
 7. Frontend : écran « séquence inconnue » (le plus vu, à ne pas bâcler)
 8. Polices locales, cache d'images, purge des jobs
