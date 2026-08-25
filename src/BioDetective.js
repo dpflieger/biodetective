@@ -30,14 +30,38 @@ const MESSAGE_ROTATE_MS = 2000;
 // En dessous, la saisie est un accident plutôt qu'une séquence.
 const MIN_BASES = 4;
 
-const SEARCH_MESSAGES = [
-  'Lecture de la séquence ADN…',
-  'Comparaison avec les organismes connus…',
-  'Analyse des correspondances…',
-  'Interrogation de la base taxonomique…',
-  'Recoupement des empreintes génétiques…',
-  'Identification en cours…',
+// Les analyses durent de 2,5 à 13 s (tirage côté serveur). Une attente longue
+// doit avoir l'air de chercher plus profond, pas d'être bloquée : les messages
+// changent donc de registre au fil des secondes.
+const SEARCH_PHASES = [
+  {
+    after: 0,
+    messages: [
+      'Lecture de la séquence ADN…',
+      'Comparaison avec les organismes connus…',
+      'Analyse des correspondances…',
+    ],
+  },
+  {
+    after: 4500,
+    messages: [
+      'Aucune correspondance évidente…',
+      'Élargissement à la base taxonomique complète…',
+      'Recoupement des empreintes génétiques…',
+      'Séquence complexe, analyse approfondie…',
+    ],
+  },
+  {
+    after: 8000,
+    messages: [
+      'Analyse approfondie en cours…',
+      'Vérification des derniers candidats…',
+      'Encore un instant, ça vient…',
+    ],
+  },
 ];
+
+const SEARCH_MESSAGES = SEARCH_PHASES[0].messages;
 
 // Affichés sur l'écran « séquence inconnue », qui sera de loin le plus vu :
 // autant qu'on y apprenne quelque chose.
@@ -108,10 +132,12 @@ export default function BioDetective() {
   const [message, setMessage] = useState(SEARCH_MESSAGES[0]);
   const [fact, setFact] = useState(DNA_FACTS[0]);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [elapsed, setElapsed] = useState(null);
 
   // Tous les intervalles vivent ici : un timer oublié continue de tourner
   // en fond et fait clignoter l'écran de résultat.
   const timers = useRef({ poll: null, image: null, message: null });
+  const searchStart = useRef(0);
 
   const clearAllIntervals = useCallback(() => {
     Object.keys(timers.current).forEach((key) => {
@@ -218,6 +244,7 @@ export default function BioDetective() {
     (job) => {
       clearAllIntervals();
       setAnalysed(job.sequence || '');
+      setElapsed(job.analysis_time || null);
       if (job.status === 'error') {
         fail(job.error_message || "L'analyse a échoué.");
       } else if (job.matched && job.organism) {
@@ -248,10 +275,17 @@ export default function BioDetective() {
         IMAGE_ROTATE_MS
       );
     }
+    searchStart.current = Date.now();
     let m = 0;
     timers.current.message = setInterval(() => {
-      m = (m + 1) % SEARCH_MESSAGES.length;
-      setMessage(SEARCH_MESSAGES[m]);
+      const elapsed = Date.now() - searchStart.current;
+      // Dernière phase dont le seuil est franchi.
+      const phase = SEARCH_PHASES.reduce(
+        (acc, p) => (elapsed >= p.after ? p : acc),
+        SEARCH_PHASES[0]
+      );
+      m = (m + 1) % phase.messages.length;
+      setMessage(phase.messages[m]);
     }, MESSAGE_ROTATE_MS);
 
     let jobId;
@@ -436,6 +470,12 @@ export default function BioDetective() {
             </div>
 
             <DnaStrip sequence={analysed} size="small" />
+            {elapsed !== null && (
+              <p className="result__timing">
+                Analyse effectuée en{' '}
+                {elapsed.toFixed(1).replace('.', ',')} secondes
+              </p>
+            )}
             <button className="btn btn--accent" onClick={reset}>
               NOUVELLE ANALYSE
             </button>

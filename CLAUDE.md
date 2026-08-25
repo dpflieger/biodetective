@@ -45,7 +45,7 @@ Conséquences à ne jamais oublier en codant :
 - Le pourcentage d'identité affiché vaut **toujours 100 %** (correspondance exacte).
 - L'API garde une **exécution asynchrone avec polling** alors qu'une recherche en table est
   instantanée. C'est **volontaire** : l'attente est la mise en scène (images qui défilent,
-  barre de progression). Voir [Délai artificiel](#délai-artificiel).
+  barre de progression). Voir [Durée d'analyse variable](#durée-danalyse-variable).
 
 ---
 
@@ -243,17 +243,46 @@ Chaque organisme renvoyé porte un champ `display_name` : nom français s'il exi
 sinon nom commun anglais, sinon nom scientifique. Le frontend affiche ce champ sans
 avoir à arbitrer lui-même.
 
-### Délai artificiel
+### Durée d'analyse variable
 
-La recherche en table est instantanée, mais l'écran de recherche a besoin de durer.
-Le backend attend donc **3 à 5 secondes** avant de passer le job en `completed`.
+La recherche en table est instantanée, mais l'écran de recherche a besoin de
+durer. La durée est **tirée au hasard** à chaque analyse, pour que deux enfants
+qui se suivent ne voient pas la même chose et qu'une « analyse difficile »
+arrive de temps en temps.
 
-- Trop court → l'animation n'a pas le temps d'exister, l'enfant ne voit rien.
-- Trop long → un enfant de 8 ans décroche.
-- Ce délai doit être une **constante en haut du fichier**, ajustable le jour J sans
-  fouiller le code (`ANALYSIS_DELAY_SECONDS = 4.0`).
+| Poids | Durée | Registre |
+|-------|-------|----------|
+| 55 % | 2,5 – 4 s | rapide |
+| 30 % | 4,5 – 7 s | normale |
+| 12 % | 7,5 – 10 s | approfondie |
+| 3 % | 10,5 – 13 s | très longue |
 
----
+Moyenne ≈ 4,9 s. Réglable dans `ANALYSIS_TIERS` en tête d'`api.py`.
+
+#### ⚠️ La durée ne doit jamais dépendre du résultat
+
+Le tirage a lieu **avant** la recherche et n'utilise ni la séquence ni le
+résultat. Si les analyses longues aboutissaient plus souvent à une séquence
+inconnue, l'opérateur — puis les enfants — apprendraient à lire la réponse avant
+l'écran de résultat, et toute la mise en scène tomberait.
+
+Vérifié sur 60 analyses : moyenne 5,19 s quand un organisme est trouvé,
+5,33 s quand la séquence est inconnue. Écart 0,14 s, soit rien.
+**Refaire cette mesure après toute modification d'`ANALYSIS_TIERS`.**
+
+#### Messages par phases
+
+Une attente de 10 s doit avoir l'air de chercher plus profond, pas d'être
+bloquée. `SEARCH_PHASES` dans `BioDetective.js` change de registre au fil des
+secondes : messages normaux, puis « Séquence complexe, analyse approfondie… »
+à partir de 4,5 s, puis « Encore un instant, ça vient… » à partir de 8 s.
+
+#### Accélérer en pleine journée
+
+Si la file d'attente s'allonge, fixer une durée unique sans toucher au code :
+```bash
+BIODETECTIVE_FIXED_DELAY=3 python3 api.py
+```
 
 ## 🔑 Table de correspondance (`sequences.json`)
 

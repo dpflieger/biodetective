@@ -35,10 +35,31 @@ from identify import Identifier, SequenceError, normalize
 # Réglages — les trois premiers sont ceux qu'on retouche le jour de la démo
 # --------------------------------------------------------------------------
 
-# La recherche en table est instantanée. Ce délai EST la mise en scène :
-# il laisse le temps aux images de défiler et à l'enfant de s'installer.
-# Trop court, l'animation n'existe pas ; trop long, un enfant de 8 ans décroche.
-ANALYSIS_DELAY_SECONDS = 4.0
+# La recherche en table est instantanée. Cette attente EST la mise en scène :
+# elle laisse le temps aux images de défiler et à l'enfant de s'installer.
+#
+# La durée est tirée au hasard pour que deux enfants qui se suivent ne voient
+# pas exactement la même chose, et pour qu'une « analyse difficile » arrive de
+# temps en temps.
+#
+# ⚠️ Le tirage est INDÉPENDANT du résultat, et il a lieu avant même la
+# recherche. Si les analyses longues aboutissaient plus souvent à une séquence
+# inconnue, l'opérateur — puis les enfants — apprendraient à lire la réponse
+# avant l'écran de résultat, et toute la mise en scène tomberait.
+#
+# (poids, (durée mini, durée maxi), étiquette de journal)
+ANALYSIS_TIERS = [
+    (55, (2.5, 4.0), "rapide"),
+    (30, (4.5, 7.0), "normale"),
+    (12, (7.5, 10.0), "approfondie"),
+    (3, (10.5, 13.0), "très longue"),
+]
+
+# Moyenne ~4,9 s. Fixer une durée unique se fait sans toucher au code, utile
+# si la file d'attente s'allonge en pleine journée :
+#     BIODETECTIVE_FIXED_DELAY=3 python3 api.py
+_fixed = os.environ.get("BIODETECTIVE_FIXED_DELAY")
+ANALYSIS_FIXED_SECONDS = float(_fixed) if _fixed else None
 
 # Taille du pool d'images tiré au démarrage pour l'animation de recherche.
 IMAGE_POOL_SIZE = 400
@@ -176,7 +197,14 @@ async def lifespan(app: FastAPI):
     log.info("Base    : %s (%d organismes)", DB_PATH, state.organism_count)
     log.info("Démo    : %d séquences connues", len(state.identifier))
     log.info("Images  : pool de %d en mémoire", len(state.image_pool))
-    log.info("Délai   : %.1f s par analyse", ANALYSIS_DELAY_SECONDS)
+    if ANALYSIS_FIXED_SECONDS is not None:
+        log.info("Durée   : fixée à %.1f s", ANALYSIS_FIXED_SECONDS)
+    else:
+        lo = min(t[1][0] for t in ANALYSIS_TIERS)
+        hi = max(t[1][1] for t in ANALYSIS_TIERS)
+        avg = sum(w * (a + b) / 2 for w, (a, b), _ in ANALYSIS_TIERS) / sum(
+            t[0] for t in ANALYSIS_TIERS)
+        log.info("Durée   : %.1f à %.1f s, moyenne %.1f s", lo, hi, avg)
     log.info("Prêt sur http://localhost:%d  (docs : /docs)", PORT)
     yield
     log.info("Arrêt de l'API")
@@ -225,7 +253,7 @@ def root():
         "status": "ok",
         "organisms": state.organism_count,
         "known_sequences": len(state.identifier) if state.identifier else 0,
-        "analysis_delay_seconds": ANALYSIS_DELAY_SECONDS,
+        "analysis_fixed_seconds": ANALYSIS_FIXED_SECONDS,
         "jobs_in_memory": len(state.jobs),
     }
 
@@ -281,6 +309,17 @@ def random_images(count: int = 8):
 # Analyse
 # --------------------------------------------------------------------------
 
+def draw_duration():
+    """Tire la durée d'une analyse. Sans lien avec la séquence ni le résultat."""
+    if ANALYSIS_FIXED_SECONDS is not None:
+        return float(ANALYSIS_FIXED_SECONDS), "fixe"
+    weights = [t[0] for t in ANALYSIS_TIERS]
+    low, high = 0, 0
+    tier = random.choices(ANALYSIS_TIERS, weights=weights, k=1)[0]
+    _w, (low, high), label = tier
+    return random.uniform(low, high), label
+
+
 def purge_jobs():
     """Oublie les jobs terminés les plus anciens au-delà de MAX_JOBS."""
     if len(state.jobs) <= MAX_JOBS:
@@ -301,7 +340,7 @@ async def run_analysis(job_id: str, sequence: str):
     """
     job = state.jobs[job_id]
     try:
-        await asyncio.sleep(ANALYSIS_DELAY_SECONDS)
+        await asyncio.sleep(job["planned_duration"])
 
         taxid = state.identifier.identify(sequence)
         if taxid is None:
@@ -342,6 +381,7 @@ def job_payload(job):
         "matched": job.get("matched"),
         "organism": job.get("organism"),
         "sequence": job["sequence"],
+        "planned_duration": round(job.get("planned_duration", 0), 1),
         "analysis_time": job.get("analysis_time"),
         "error_message": job.get("error_message"),
     }
@@ -357,14 +397,17 @@ async def analyze(req: AnalyzeRequest):
         # séquence valide mais inconnue, qui répond 200 avec matched=false.
         raise HTTPException(400, str(exc))
 
+    duration, tier = draw_duration()
     job_id = str(uuid.uuid4())
     state.jobs[job_id] = {
         "job_id": job_id,
         "status": "running",
         "sequence": sequence,
+        "planned_duration": duration,
         "created_at": time.time(),
         "started_at": time.time(),
     }
+    log.info("[%s] analyse %s de %.1f s", job_id[:8], tier, duration)
     purge_jobs()
     asyncio.create_task(run_analysis(job_id, sequence))
     return job_payload(state.jobs[job_id])
