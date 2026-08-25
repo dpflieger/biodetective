@@ -74,8 +74,11 @@ MIN_COVERAGE = 80.0
 # BIODETECTIVE_BLAST_RESULTS à vide désactive l'archivage.
 RESULTS_DIR = os.environ.get("BIODETECTIVE_BLAST_RESULTS", "blast_results")
 
+# staxids vient de la banque elle-même (nt + taxdb). Sur notre banque locale
+# construite à partir d'un FASTA « taxid|accession », il est vide et l'on
+# retombe sur l'identifiant. Les deux montages fonctionnent donc.
 _FIELDS = ("sseqid pident length mismatch gapopen qstart qend "
-           "sstart send evalue bitscore qseq sseq qlen slen stitle")
+           "sstart send evalue bitscore qseq sseq qlen slen staxids stitle")
 
 
 def blast_available():
@@ -183,18 +186,33 @@ def _parse(stdout):
         if len(p) < 14:
             continue
         sseqid = p[0]
-        # L'identifiant est « taxid|accession » : le taxid vient de la banque,
-        # pas d'un fichier de taxonomie annexe.
-        taxid, _, accession = sseqid.partition("|")
-        try:
-            taxid = int(taxid)
-        except ValueError:
+        # Deux origines possibles pour le taxid : la colonne staxids quand la
+        # banque en porte (nt avec taxdb), sinon l'identifiant « taxid|acc »
+        # de notre FASTA maison.
+        staxids = p[15] if len(p) > 15 else ""
+        head, _, accession = sseqid.partition("|")
+        taxid = None
+        for candidate in (staxids.split(";")[0].strip(), head):
+            # Sans taxdb, blastn écrit « 0 » et non une colonne vide :
+            # le prendre pour argent comptant donnerait taxid 0 partout.
+            if not candidate or candidate in ("0", "N/A"):
+                continue
+            try:
+                taxid = int(candidate)
+                break
+            except (TypeError, ValueError):
+                continue
+        if taxid is None:
             continue
+        if not accession:
+            # blastn peut rendre « NC_003070.9| » : la barre finale n'est pas
+            # un séparateur de champ mais un reliquat de format.
+            accession = sseqid.rstrip("|")
         qlen = int(p[13]) or 1
         length = int(p[2])
         slen = int(p[14]) if len(p) > 14 and p[14].isdigit() else None
         # stitle peut contenir des tabulations : on reprend tout le reste.
-        stitle = "\t".join(p[15:]).strip() if len(p) > 15 else ""
+        stitle = "\t".join(p[16:]).strip() if len(p) > 16 else ""
         # blastdbcmd recopie parfois l'identifiant en tête du titre.
         if stitle.startswith(sseqid):
             stitle = stitle[len(sseqid):].strip()

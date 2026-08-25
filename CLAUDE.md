@@ -66,51 +66,30 @@ pour un enfant qui improvise.
 
 ### Chaîne de construction de la banque
 
-```bash
-# 1. sur le serveur qui héberge nt
-python3 extract_from_nt.py --db /chemin/vers/nt --survey   # mesurer d'abord
-python3 extract_from_nt.py --db /chemin/vers/nt            # extraire
-#    -> biodetective_subset.fasta, à rapatrier
+**Avec nt copié sur la machine** — la voie retenue, et de loin la plus simple :
 
-# 2. sur la machine de démonstration
-python3 prepare_blastdb.py --fasta biodetective_subset.fasta
+```bash
+blastdb_aliastool -db nt -taxidlist taxids.txt -dbtype nucl \
+                  -out blastdb/biodetective -title "BioDetective"
 python3 make_strips.py --length 24
 python3 validate_sequences.py
 ```
 
-`extract_from_nt.py` prend **tout** ce que nt contient pour nos taxons : aucun
-plafond de longueur, aucune sélection par marqueur, aucun quota par espèce.
-C'est un petit nt restreint à notre liste de taxid. Un plafond par espèce
-existe (`--budget`) mais **n'est pas actif par défaut** ; `--survey` simule
-plusieurs plafonds sans rien extraire, si le besoin s'en présente un jour.
+`blastdb_aliastool` écrit un simple fichier `.nal` **de quelques centaines
+d'octets** qui restreint nt à nos taxons. Aucune extraction, aucune copie de
+séquences, et surtout **l'espace de recherche est réellement réduit** : blastn
+annonce la taille du sous-ensemble, donc les E-value sont justes.
 
-**Prévoir la place.** L'extraction dépasse largement 500 Go. `prepare_blastdb.py`
-n'écrit donc **pas** de copie nettoyée : il réécrit les en-têtes à la volée et
-pousse le flux directement dans `makeblastdb`, qui lit `stdin`. Sans cela il
-faudrait deux fois la taille du FASTA sur le disque. `--skip-makeblastdb` rétablit
-l'écriture d'un fichier, au prix de cette place.
+C'est ce dernier point qui départage les deux méthodes. `blastn -db nt
+-taxidlist …` filtre bien les résultats mais **calcule les statistiques sur nt
+entier** : vérifié, la taille annoncée reste inchangée, et un brin de 24 briques
+retomberait vers E ≈ 0,1. L'alias, lui, donne 1,0 × 10⁻⁶.
 
-**Pourquoi aucun plafond.** La première version n'en gardait qu'une séquence par
-espèce, pour protéger la E-value. C'était une erreur : la banque ne contenait
-pour *Arabidopsis* qu'un ADNc de 785 pb, soit 0,00058 % de ses 135 Mpb, et une
-séquence prise ailleurs dans le génome ne donnait **aucun hit**. La mesure
-montre qu'il n'y avait rien à protéger — E-value pour 24 pb, taille simulée
-avec `-dbsize` :
+⚠️ Copier **aussi les fichiers `taxdb.btd` et `taxdb.bti`** à côté de nt. Sans
+eux, `-taxidlist` refuse de fonctionner et `staxids` ne rend que des zéros.
 
-| Banque | E (24 pb) | E (34 pb) |
-|--------|-----------|-----------|
-| 32 Mpb | 1,1 × 10⁻⁶ | 2,2 × 10⁻¹² |
-| 3,2 Gpb | 7,6 × 10⁻⁵ | 1,9 × 10⁻¹⁰ |
-| 320 Gpb | 0,004 | 1,5 × 10⁻⁸ |
-
-Dix mille fois plus gros, et un brin de 24 briques reste exploitable. **Ne pas
-réintroduire de plafond** sans refaire cette mesure.
-
-`prepare_blastdb.py` reste indispensable : `blastdbcmd -taxidlist` descend dans
-la hiérarchie et rapporte des sous-espèces dont le taxid n'existe pas dans
-`biodetective.db`. Un hit sur l'une d'elles ne trouverait aucune fiche et serait
-écarté, alors que c'est souvent la bonne réponse. Le script les rattache à leur
-ancêtre via `nodes.dmp`.
+`extract_from_nt.py` et `prepare_blastdb.py` restent utiles si nt n'est pas
+accessible localement, mais l'alias les rend inutiles dès qu'il l'est.
 
 ### La banque en service
 
