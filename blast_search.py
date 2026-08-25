@@ -178,6 +178,33 @@ def append_verdict(path, text):
         pass
 
 
+# Étiquettes de banque du format historique du NCBI : « ref|NC_003070.9| ».
+DB_TAGS = {"ref", "gb", "emb", "dbj", "tpg", "tpe", "tpd", "gnl", "lcl",
+           "pir", "prf", "sp", "pdb", "pat", "bbs", "gi"}
+
+
+def split_seqid(sseqid):
+    """(taxid éventuel, accession) à partir d'un identifiant BLAST.
+
+    Trois formes coexistent selon la banque :
+        3702|NC_003070.9   notre FASTA maison, le taxid est en tête
+        ref|NC_003070.9|   nt construit avec -parse_seqids
+        NC_003070.9        identifiant nu
+    """
+    parts = [x for x in sseqid.split("|") if x]
+    if not parts:
+        return None, sseqid
+    if parts[0].isdigit() and len(parts) > 1:
+        return int(parts[0]), parts[1]          # taxid|accession
+    if parts[0].lower() in DB_TAGS and len(parts) > 1:
+        # gi|123|ref|NC_… : la dernière étiquette connue précède l'accession
+        for i in range(len(parts) - 1, 0, -1):
+            if parts[i - 1].lower() in DB_TAGS:
+                return None, parts[i]
+        return None, parts[1]
+    return None, parts[0]
+
+
 def _parse(stdout):
     """Transforme la sortie tabulée en liste de hits ordonnés."""
     hits = []
@@ -190,24 +217,21 @@ def _parse(stdout):
         # banque en porte (nt avec taxdb), sinon l'identifiant « taxid|acc »
         # de notre FASTA maison.
         staxids = p[15] if len(p) > 15 else ""
-        head, _, accession = sseqid.partition("|")
+        embedded, accession = split_seqid(sseqid)
+
         taxid = None
-        for candidate in (staxids.split(";")[0].strip(), head):
-            # Sans taxdb, blastn écrit « 0 » et non une colonne vide :
-            # le prendre pour argent comptant donnerait taxid 0 partout.
-            if not candidate or candidate in ("0", "N/A"):
-                continue
+        # Sans taxdb, blastn écrit « 0 » et non une colonne vide : le prendre
+        # pour argent comptant donnerait taxid 0 sur toute la ligne.
+        first = staxids.split(";")[0].strip()
+        if first and first not in ("0", "N/A"):
             try:
-                taxid = int(candidate)
-                break
-            except (TypeError, ValueError):
-                continue
+                taxid = int(first)
+            except ValueError:
+                taxid = None
+        if taxid is None:
+            taxid = embedded
         if taxid is None:
             continue
-        if not accession:
-            # blastn peut rendre « NC_003070.9| » : la barre finale n'est pas
-            # un séparateur de champ mais un reliquat de format.
-            accession = sseqid.rstrip("|")
         qlen = int(p[13]) or 1
         length = int(p[2])
         slen = int(p[14]) if len(p) > 14 and p[14].isdigit() else None
