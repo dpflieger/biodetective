@@ -1,8 +1,9 @@
 # CLAUDE.md - Guide de développement BioDetective
 
-## ⚠️ État du projet : BACKEND COMPLET, FRONTEND À FAIRE
+## ⚠️ État du projet : APPLICATION COMPLÈTE ET FONCTIONNELLE
 
-Ce fichier a d'abord été un cahier des charges. Le backend est maintenant réel et testé.
+Ce fichier a d'abord été un cahier des charges. Tout y est maintenant réel et testé
+dans un navigateur.
 
 **Fait :**
 - `data_pipeline.py` → `biodetective.db` (25 545 organismes, ~6 s de construction)
@@ -11,8 +12,11 @@ Ce fichier a d'abord été un cahier des charges. Le backend est maintenant rée
 - `identify.py` → normalisation + recherche exacte
 - `validate_sequences.py` → contrôle avant démo
 - `api.py` → API FastAPI complète, 8 routes, testée de bout en bout
+- Frontend React complet : accueil, recherche, résultat, séquence inconnue, erreur
+- Polices Orbitron/Rajdhani servies en local (57 ko, aucune dépendance réseau)
 
-**À faire :** tout le frontend React (`src/`, `public/`, `package.json`).
+**Reste à faire :** les fiches descriptives, le cache d'images local, et la
+répétition générale en salle. Voir la roadmap.
 
 Voir la [Roadmap](#-roadmap-ordre-de-construction) en fin de fichier pour l'ordre de construction.
 
@@ -57,20 +61,22 @@ Biodetective/
 ├── biodetective.db          # [GÉNÉRÉ] 25 545 organismes, 11 Mo
 ├── requirements.txt         # [FAIT]
 ├── api.py                   # [FAIT] API FastAPI, 8 routes
-├── package.json             # [À FAIRE] config React (proxy → localhost:8000)
+├── package.json             # [FAIT] config React (proxy → localhost:8000)
 ├── new_taxdump/             # données NCBI (non versionnées)
 │   ├── names.dmp            # noms scientifiques et communs anglais
 │   ├── nodes.dmp            # rang de chaque taxon
 │   ├── images.dmp           # images — point d'entrée du pipeline
 │   ├── rankedlineage.dmp    # lignée éclatée par rang
 │   └── … (11 autres .dmp inutilisés)
-├── src/                     # [À FAIRE] frontend React
+├── src/                     # [FAIT] frontend React
 │   ├── index.js
 │   ├── App.js
-│   ├── BioDetective.js
+│   ├── BioDetective.js      # composant unique, 5 écrans
 │   └── biodetective.css
 └── public/
-    └── index.html
+    ├── index.html
+    ├── favicon.svg
+    └── fonts/               # Orbitron + Rajdhani en local + fonts.css
 ```
 
 ---
@@ -414,6 +420,22 @@ const [isAPIConnected, setIsAPIConnected] = useState(false);
 
 ---
 
+### Deux pièges à ne pas réintroduire
+
+**1. Le test de vie ne doit pas taper sur `/`.** Le serveur de développement de
+react-scripts sert son propre `index.html` sur `/` et ne relaie au backend que les
+chemins absents de `public/`. Un `fetch('/')` répond donc 200 avec du HTML même
+backend éteint : le test réussit toujours. On interroge `/stats` et on vérifie que
+la réponse contient bien un `organisms` numérique.
+
+**2. Pas de prop `key` sur l'image qui tourne.** Avec une `key` changeante, React
+remonte un `<img>` neuf toutes les 300 ms ; un élément fraîchement monté n'a pas
+encore peint, et le cadre de l'écran de recherche reste noir pendant toute
+l'analyse. On réutilise le même noeud en ne changeant que `src`, et on ne fait
+tourner que les images **déjà préchargées** (`ready`), jamais le pool brut.
+
+---
+
 ## 🎨 Design System
 
 ### Palette de couleurs
@@ -425,6 +447,11 @@ const [isAPIConnected, setIsAPIConnected] = useState(false);
 --color-bg-card: rgba(0, 0, 0, 0.8);  /* Fond des cartes */
 --color-text: #ffffff;          /* Texte secondaire */
 ```
+
+### Briques d'ADN
+Les séquences sont affichées en briques colorées (`DnaStrip`), pour que l'enfant
+retrouve à l'écran ce qu'il a dans les mains. **Les couleurs de `BASE_COLORS` dans
+`BioDetective.js` doivent être ajustées à celles des vraies briques du Brickopore.**
 
 ### Polices
 ```css
@@ -551,9 +578,9 @@ Idem `Wikimedia Commons` (22 130) vs `Wikimedia  Commons` (double espace, 2) vs
 3. ~~`sequences.json` + `identify.py` + `validate_sequences.py`~~ ✅
 4. ~~`api.py` : `/`, `/stats`, `/organism/{id}`~~ ✅
 5. ~~`api.py` : `/analyze` + polling + `/random-images`~~ ✅
-6. Frontend : accueil → recherche → résultat
-7. Frontend : écran « séquence inconnue » (le plus vu, à ne pas bâcler)
-8. Polices locales, cache d'images, purge des jobs
+6. ~~Frontend : accueil → recherche → résultat~~ ✅
+7. ~~Frontend : écran « séquence inconnue »~~ ✅
+8. ~~Polices locales~~ ✅, ~~purge des jobs~~ ✅, cache d'images **local** (reste à faire)
 9. Répétition générale dans les conditions réelles de la salle
 
 ---

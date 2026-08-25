@@ -1,0 +1,504 @@
+/* BioDetective — thème « série policière futuriste »
+   Cible : écran large d'ordinateur fixe, salle sombre. Pas de mobile. */
+
+:root {
+  --color-primary: #00ff88;
+  --color-secondary: #00ccff;
+  --color-accent: #ff6b00;
+  --color-bg: #0c0c0c;
+  --color-bg-card: rgba(0, 0, 0, 0.8);
+  --color-text: #ffffff;
+  --color-muted: #7d8b85;
+  --border: 1px solid rgba(0, 255, 136, 0.25);
+  --glow: 0 0 20px rgba(0, 255, 136, 0.35);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+  font-size: 18px;
+  overflow-x: hidden;
+}
+
+.app {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem 4rem;
+}
+
+/* Grille de fond : donne la profondeur sans coûter une image. */
+.app__grid {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(0, 255, 136, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 136, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  z-index: 0;
+}
+
+.screen {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1100px;
+  animation: fadeIn 0.4s ease both;
+}
+
+.app__footer {
+  position: fixed;
+  bottom: 0.75rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  z-index: 1;
+}
+
+/* ------------------------------------------------------------ accueil */
+
+.title {
+  font-family: 'Orbitron', monospace;
+  font-weight: 900;
+  font-size: clamp(2.5rem, 7vw, 5rem);
+  letter-spacing: 0.08em;
+  text-align: center;
+  margin: 0;
+  color: var(--color-primary);
+  text-shadow: var(--glow);
+  animation: pulse 3s ease-in-out infinite;
+}
+
+.title__accent { color: var(--color-secondary); }
+
+.subtitle {
+  text-align: center;
+  font-size: 1.4rem;
+  color: var(--color-muted);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin: 0.5rem 0 2.5rem;
+}
+
+.panel {
+  background: var(--color-bg-card);
+  border: var(--border);
+  border-radius: 6px;
+  padding: 1.75rem;
+  box-shadow: var(--glow);
+}
+
+.panel--tight { padding: 1.25rem; margin: 1.5rem auto; max-width: 720px; }
+
+.panel__label {
+  display: block;
+  font-size: 0.85rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.seq-input {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  background: #050505;
+  border: 1px solid rgba(0, 204, 255, 0.3);
+  border-radius: 4px;
+  color: var(--color-primary);
+  font-family: 'Courier New', monospace;
+  font-size: 1.35rem;
+  letter-spacing: 0.18em;
+  padding: 0.9rem;
+}
+
+.seq-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.4);
+}
+
+.seq-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  margin: 0.6rem 0 0.9rem;
+  letter-spacing: 0.08em;
+}
+
+.seq-meta__hint { opacity: 0.7; }
+
+/* ---------------------------------------------------- briques d'ADN */
+
+.dna-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: center;
+  margin: 0.75rem 0;
+}
+
+.dna-brick {
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  color: #0c0c0c;
+  width: 30px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  /* Le liseré clair en haut imite le tenon d'une brique LEGO. */
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.45);
+  font-size: 1rem;
+}
+
+.dna-strip--small .dna-brick {
+  width: 20px;
+  height: 24px;
+  font-size: 0.75rem;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45);
+}
+
+/* ------------------------------------------------------------ boutons */
+
+.btn {
+  display: block;
+  width: 100%;
+  margin-top: 1.25rem;
+  padding: 1rem;
+  font-family: 'Orbitron', monospace;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.16em;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.2s ease;
+}
+
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn:not(:disabled):hover { transform: translateY(-2px); }
+
+.btn--primary {
+  background: var(--color-primary);
+  color: #0c0c0c;
+  box-shadow: var(--glow);
+}
+
+.btn--accent {
+  background: var(--color-accent);
+  color: #0c0c0c;
+  box-shadow: 0 0 20px rgba(255, 107, 0, 0.4);
+  max-width: 340px;
+}
+
+/* ------------------------------------------------------- état serveur */
+
+.api-status {
+  margin-top: 1.25rem;
+  text-align: center;
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.api-status--ok { color: var(--color-primary); }
+.api-status--wait { color: var(--color-muted); animation: blink 1.2s infinite; }
+.api-status--ko { color: var(--color-accent); }
+
+/* --------------------------------------------------------- recherche */
+
+.screen--search { text-align: center; }
+
+.search__title {
+  font-family: 'Orbitron', monospace;
+  font-size: 2rem;
+  letter-spacing: 0.22em;
+  color: var(--color-secondary);
+  animation: blink 1.6s infinite;
+  margin-bottom: 1.5rem;
+}
+
+.search__frame {
+  position: relative;
+  width: min(420px, 80vw);
+  height: min(420px, 80vw);
+  margin: 0 auto 1.5rem;
+  border: var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #050505;
+  box-shadow: var(--glow);
+}
+
+.search__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Ligne de scan qui balaie la vignette. */
+.search__scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  animation: scan 2s linear infinite;
+}
+
+.search__waiting {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 5rem;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.search__message {
+  font-size: 1.25rem;
+  color: var(--color-primary);
+  letter-spacing: 0.1em;
+  min-height: 1.8em;
+}
+
+.progress {
+  width: min(520px, 90%);
+  height: 4px;
+  margin: 1rem auto;
+  background: rgba(0, 255, 136, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress__bar {
+  width: 35%;
+  height: 100%;
+  background: var(--color-primary);
+  animation: progress 1.4s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------- résultat */
+
+.result__grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) 1fr;
+  gap: 2.5rem;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .result__grid { grid-template-columns: 1fr; }
+}
+
+.result__photo {
+  position: relative;
+  border: var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #050505;
+  box-shadow: var(--glow);
+  min-height: 300px;
+}
+
+.result__photo img {
+  width: 100%;
+  display: block;
+  transition: opacity 0.4s ease;
+}
+
+.result__loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-muted);
+  letter-spacing: 0.12em;
+  animation: blink 1.2s infinite;
+}
+
+.credit {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.72rem;
+  color: var(--color-muted);
+  background: rgba(0, 0, 0, 0.7);
+  line-height: 1.4;
+}
+
+.identity {
+  font-family: 'Orbitron', monospace;
+  font-size: 1.6rem;
+  color: var(--color-primary);
+  letter-spacing: 0.14em;
+  text-shadow: var(--glow);
+  animation: glitch 0.35s ease both;
+}
+
+.result__name {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  margin: 0.4rem 0 0.2rem;
+  color: var(--color-text);
+}
+
+.result__sci {
+  font-style: italic;
+  font-size: 1.3rem;
+  color: var(--color-secondary);
+  margin: 0 0 1rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.35rem 1rem;
+  border: 1px solid var(--color-accent);
+  border-radius: 999px;
+  color: var(--color-accent);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+}
+
+.facts {
+  margin: 1.5rem 0;
+  border-top: var(--border);
+}
+
+.fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 0.55rem 0;
+  border-bottom: var(--border);
+}
+
+.fact__label {
+  color: var(--color-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.fact__value { text-align: right; }
+
+/* ------------------------------------------------ séquence inconnue */
+
+.screen--unknown { text-align: center; }
+
+.unknown__icon { font-size: 4rem; animation: pulse 2.5s ease-in-out infinite; }
+
+.unknown__title {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(1.8rem, 5vw, 3rem);
+  letter-spacing: 0.14em;
+  color: var(--color-secondary);
+  margin: 0.5rem 0;
+  text-shadow: 0 0 20px rgba(0, 204, 255, 0.4);
+}
+
+.unknown__lead { font-size: 1.35rem; line-height: 1.6; color: var(--color-text); }
+
+.unknown__count {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  letter-spacing: 0.12em;
+  margin: 0.5rem 0 0;
+}
+
+.unknown__fact {
+  max-width: 640px;
+  margin: 1.5rem auto;
+  font-size: 1.1rem;
+  color: var(--color-muted);
+  line-height: 1.6;
+}
+
+.unknown__fact strong { color: var(--color-primary); }
+
+.screen--unknown .btn, .screen--error .btn { max-width: 520px; margin: 1.5rem auto 0; }
+
+/* ------------------------------------------------------------ erreur */
+
+.screen--error { text-align: center; }
+.error__icon { font-size: 3.5rem; color: var(--color-accent); }
+
+.error__title {
+  font-family: 'Orbitron', monospace;
+  letter-spacing: 0.16em;
+  color: var(--color-accent);
+}
+
+.error__message {
+  font-size: 1.2rem;
+  max-width: 620px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* -------------------------------------------------------- animations */
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes fadeInOut {
+  from { opacity: 0.25; }
+  to { opacity: 1; }
+}
+
+@keyframes progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(320%); }
+}
+
+@keyframes scan {
+  0% { top: 0; }
+  100% { top: 100%; }
+}
+
+@keyframes glitch {
+  0% { transform: translateX(-6px); opacity: 0; }
+  40% { transform: translateX(4px); opacity: 1; }
+  70% { transform: translateX(-2px); }
+  100% { transform: none; }
+}
+
+/* Un enfant photosensible ou simplement gêné par le clignotement doit
+   pouvoir utiliser l'application : on respecte le réglage du système. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

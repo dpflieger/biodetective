@@ -1,0 +1,24 @@
+{
+  "name": "biodetective",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Identification d'organismes pour la Fête de la Science (IBMP Strasbourg)",
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-scripts": "5.0.1"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test"
+  },
+  "proxy": "http://localhost:8000",
+  "browserslist": {
+    "production": [">0.2%", "not dead"],
+    "development": ["last 1 chrome version", "last 1 firefox version"]
+  },
+  "eslintConfig": {
+    "extends": ["react-app"]
+  }
+}
