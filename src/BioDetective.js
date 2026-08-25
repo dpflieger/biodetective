@@ -1,14 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-// Couleurs des briques LEGO du Brickopore.
-// ⚠️ À faire correspondre aux briques réellement utilisées : l'enfant doit
-// retrouver à l'écran les couleurs qu'il a dans les mains.
+// Couleurs des briques LEGO du Brickopore : A bleu, T vert, G jaune, C rouge.
+// Teintes officielles LEGO, pour que l'enfant retrouve à l'écran exactement
+// les briques qu'il a dans les mains.
+//
+// La couleur du texte varie parce que les quatre teintes ne se valent pas :
+// sur le bleu et le rouge, une lettre noire tombe à 2,8 et 3,4 de contraste ;
+// en blanc elle remonte à 6,9 et 5,8. Le vert et le jaune font l'inverse.
+// Tous les couples retenus dépassent 4,5:1.
 const BASE_COLORS = {
-  A: '#ff4d4d',
-  T: '#4d9fff',
-  C: '#4dff88',
-  G: '#ffd24d',
+  A: { bg: '#0055bf', fg: '#ffffff' },  // Bright Blue
+  T: { bg: '#4b9f4a', fg: '#0c0c0c' },  // Bright Green
+  G: { bg: '#f2cd37', fg: '#0c0c0c' },  // Bright Yellow
+  C: { bg: '#c91a09', fg: '#ffffff' },  // Bright Red
 };
+
+const UNKNOWN_BASE = { bg: '#555555', fg: '#ffffff' };
 
 // L'analyse dure ~4 s côté serveur ; interroger toutes les 500 ms suffit à
 // ce que l'attente perçue ne dépasse pas le délai voulu.
@@ -92,16 +99,19 @@ function DnaStrip({ sequence, size = 'normal' }) {
   if (!sequence) return null;
   return (
     <div className={`dna-strip dna-strip--${size}`}>
-      {sequence.split('').map((base, i) => (
-        <span
-          key={i}
-          className="dna-brick"
-          style={{ background: BASE_COLORS[base] || '#555' }}
-          title={`Base ${i + 1} : ${base}`}
-        >
-          {base}
-        </span>
-      ))}
+      {sequence.split('').map((base, i) => {
+        const c = BASE_COLORS[base] || UNKNOWN_BASE;
+        return (
+          <span
+            key={i}
+            className="dna-brick"
+            style={{ background: c.bg, color: c.fg }}
+            title={`Base ${i + 1} : ${base}`}
+          >
+            {base}
+          </span>
+        );
+      })}
     </div>
   );
 }

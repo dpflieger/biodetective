@@ -538,8 +538,24 @@ image via `/api/random-images` : dégradé mais fonctionnel.
 
 ### Briques d'ADN
 Les séquences sont affichées en briques colorées (`DnaStrip`), pour que l'enfant
-retrouve à l'écran ce qu'il a dans les mains. **Les couleurs de `BASE_COLORS` dans
-`BioDetective.js` doivent être ajustées à celles des vraies briques du Brickopore.**
+retrouve à l'écran ce qu'il a dans les mains. `BASE_COLORS` reprend les teintes
+LEGO officielles des briques réellement utilisées par le Brickopore :
+
+| Base | Couleur | Fond | Texte | Contraste |
+|------|---------|------|-------|-----------|
+| A | bleu | `#0055bf` | blanc | 6,9:1 |
+| T | vert | `#4b9f4a` | noir | 5,9:1 |
+| G | jaune | `#f2cd37` | noir | 12,6:1 |
+| C | rouge | `#c91a09` | blanc | 5,8:1 |
+
+La couleur du **texte change selon la base** : sur le bleu et le rouge, une
+lettre noire tombe à 2,8 et 3,4 de contraste. Le vert et le jaune font
+l'inverse. Recalculer si une teinte change.
+
+T vert et C rouge sont la paire classiquement confondue par les daltoniens
+(deutéranopie, protanopie). C'est déjà le cas des vraies briques, et les
+changer trahirait le dispositif : la lettre inscrite sur chaque brique est le
+canal de secours, elle doit rester lisible.
 
 ### Polices
 ```css
