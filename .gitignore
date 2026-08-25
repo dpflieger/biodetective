@@ -31,3 +31,4 @@ chosen_accessions.txt
 history.json
 history.json.tmp
 blast_results/
+genome_reports/

@@ -617,6 +617,39 @@ image via `/api/random-images` : dégradé mais fonctionnel.
 
 ---
 
+### Taille du génome et nombre de chromosomes
+
+La fiche annonce la taille du génome et le nombre de chromosomes, quand on les
+connaît. Ces chiffres ne sont **pas** dans le taxdump : ils viennent des
+assemblages, via les rapports NCBI `GENOME_REPORTS`.
+
+```bash
+python3 build_genome_stats.py --download   # -> genome_stats.json
+python3 data_pipeline.py                   # relit le JSON
+```
+
+Les rapports bruts (plus de 230 Mo) ne sont pas versionnés ; `genome_stats.json`,
+compact, l'est. `data_pipeline.py` le relit à chaque construction, comme
+`common_names_fr.json`.
+
+**Couverture : 4 403 espèces sur 25 545 (17 %), mais 30 des 33 de la
+démonstration.** La plupart des espèces photographiées n'ont jamais été
+séquencées : les lignes vides sont simplement masquées.
+
+⚠️ Les trois rapports **n'ont pas la même disposition de colonnes** : dans
+`prokaryotes.txt` l'accession est en 19ᵉ colonne et les réplicons en 9ᵉ,
+l'inverse d'`eukaryotes.txt`, et `viruses.txt` donne des **Kb** et non des Mb.
+Les colonnes sont donc repérées **par leur intitulé**, jamais par leur rang.
+Lire au rang donnait 11 Mb pour *Escherichia coli*, qui en fait 4,6.
+
+Une espèce a souvent des dizaines d'assemblages : on retient celui qui porte
+une vraie accession, puis des réplicons RefSeq (`NC_`/`NZ_`), c'est-à-dire le
+génome de référence. `genome_stats.json` conserve aussi la correspondance
+`chromosome → accession`, qui permettra de situer un hit sur le bon chromosome
+et de le dessiner.
+
+---
+
 ### Localisation du hit
 
 L'écran de résultat annonce **où** la séquence a été trouvée : type de molécule,

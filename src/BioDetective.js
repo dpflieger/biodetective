@@ -626,6 +626,18 @@ export default function BioDetective() {
               <Fact label="Ordre" value={organism.order_name} />
               <Fact label="Famille" value={organism.family} />
               <Fact label="Genre" value={organism.genus} />
+              <Fact
+                label="Taille du génome"
+                value={
+                  organism.genome_size_mb
+                    ? `${fmt(Math.round(organism.genome_size_mb))} millions de bases`
+                    : null
+                }
+              />
+              <Fact
+                label="Chromosomes"
+                value={organism.chromosome_count || null}
+              />
               {/* Les champs ci-dessous sont vides pour l'instant : Fact ne
                   rend rien plutôt que d'afficher une ligne « — ». */}
               <Fact label="Taille" value={organism.size_info} />

@@ -23,6 +23,7 @@ from collections import Counter
 TAXDUMP_DIR = "new_taxdump"
 DEFAULT_DB = "biodetective.db"
 NAMES_FR = "common_names_fr.json"
+GENOME_STATS = "genome_stats.json"
 
 SEP = "\t|\t"       # séparateur de champs des .dmp NCBI
 ROW_END = "\t|"     # fin de ligne des .dmp NCBI
@@ -185,6 +186,21 @@ def load_common_names_fr(path):
         data = json.load(fh)
     log.info("%s : %d noms français", path, len(data))
     return {str(k): v for k, v in data.items()}
+
+
+def load_genome_stats(path):
+    """taxid -> taille du génome et nombre de chromosomes.
+
+    Produit par build_genome_stats.py depuis les rapports NCBI. Le taxdump
+    n'en dit rien : ces chiffres viennent des assemblages.
+    """
+    if not os.path.exists(path):
+        log.warning("%s absent : ni taille de génome ni chromosomes", path)
+        return {}
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    log.info("%s : %d génomes renseignés", path, len(data))
+    return data
 
 
 def load_ranks(path, wanted):
@@ -400,6 +416,9 @@ CREATE TABLE organisms (
     image_source      TEXT,
     image_license     TEXT,
     image_attribution TEXT,
+    genome_size_mb    REAL,
+    chromosome_count  INTEGER,
+    assembly_accession TEXT,
     created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -413,8 +432,9 @@ INSERT = """
 INSERT OR REPLACE INTO organisms (
     taxonomy_id, scientific_name, common_name_fr, common_name_en,
     kingdom, phylum, class_name, order_name, family, genus, species,
-    organism_type, image_path, image_source, image_license, image_attribution
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    organism_type, image_path, image_source, image_license, image_attribution,
+    genome_size_mb, chromosome_count, assembly_accession
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 """
 
 
@@ -438,6 +458,7 @@ def build(db_path, taxdump_dir):
     lineages = load_lineages(ranked_path, wanted)
     ranks = load_ranks(nodes_path, wanted)
     names_fr = load_common_names_fr(NAMES_FR)
+    genomes = load_genome_stats(GENOME_STATS)
 
     rows, skipped = [], 0
     type_counts = Counter()
@@ -467,6 +488,9 @@ def build(db_path, taxdump_dir):
             lin.get("family") or None, lin.get("genus") or None,
             lin.get("species") or None,
             otype, url, source, license_ or None, attribution or None,
+            (genomes.get(taxid) or {}).get("genome_size_mb"),
+            (genomes.get(taxid) or {}).get("chromosomes") or None,
+            (genomes.get(taxid) or {}).get("assembly"),
         ))
 
     conn = sqlite3.connect(db_path)
@@ -485,6 +509,8 @@ def build(db_path, taxdump_dir):
     log.info("Types les plus fréquents :")
     for label, n in type_counts.most_common(15):
         log.info("    %-22s %6d", label, n)
+    with_genome = sum(1 for r in rows if r[16])
+    log.info("Génomes renseignés : %d / %d", with_genome, len(rows))
     matched_fr = sum(1 for r in rows if r[2])
     log.info("Noms français renseignés : %d / %d", matched_fr, len(rows))
     unknown = type_counts.get("Organisme", 0)
