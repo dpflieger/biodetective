@@ -150,7 +150,14 @@ function Tree({ data, onBack }) {
         <div className="tnode__head">
           <span className="tnode__nom">{n.nom}</span>
           <span className="tnode__latin">{n.latin}</span>
-          <span className="tnode__count">{fmt(n.count)}</span>
+          <span className="tnode__count">
+            {n.described != null && (
+              <b className="tnode__described">
+                {fmt(n.described)} espèces décrites
+              </b>
+            )}
+            <span className="tnode__ours">{fmt(n.count)} en photo ici</span>
+          </span>
         </div>
         <p className="tnode__phrase">{n.phrase}</p>
       </div>
@@ -161,8 +168,11 @@ function Tree({ data, onBack }) {
     <div className="screen screen--tree">
       <h2 className="tree__title">L'ARBRE DU VIVANT</h2>
       <p className="tree__lead">
-        Les {fmt(data.total)} organismes de notre collection, rangés comme les
-        biologistes rangent le vivant : en trois grands domaines.
+        {data.total_described
+          ? `${fmt(data.total_described)} espèces décrites par la science`
+          : 'Le vivant'}
+        , rangées comme les biologistes rangent le vivant : en trois grands
+        domaines. Nous en avons {fmt(data.total)} en photo.
       </p>
 
       <div className="tree__body">

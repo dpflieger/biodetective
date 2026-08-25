@@ -1,0 +1,12 @@
+{
+  "source": "NCBI Taxonomy (new_taxdump), taxons de rang species",
+  "total_species": 2436560,
+  "bacteria": 551513,
+  "archaea": 13638,
+  "eukaryota": 1754746,
+  "metazoa": 1151891,
+  "viridiplantae": 348210,
+  "fungi": 201049,
+  "autres_eucaryotes": 53596,
+  "viruses": 80011
+}

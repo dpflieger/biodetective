@@ -637,19 +637,36 @@ et de le dessiner.
 ### Écran « L'arbre du vivant »
 
 Accessible depuis l'accueil. Trois domaines, quelques grands groupes sous les
-eucaryotes, les virus à part — avec les **effectifs réels de la collection** et
-une vignette par groupe, tirée de la base.
+eucaryotes, les virus à part, avec une vignette par groupe tirée de la base.
 
+Chaque groupe porte **deux chiffres** : les espèces **décrites par la science**,
+et celles que nous avons **en photo**. Le premier vient de la taxonomie NCBI
+entière, pas de notre collection — sinon l'arbre montrerait la forme de ce qui a
+été photographié, pas celle du vivant.
+
+| Groupe | Décrites | En photo |
+|--------|---------:|---------:|
+| Bactéries | 551 513 | 76 |
+| Archées | 13 638 | 9 |
+| Eucaryotes | 1 754 746 | 25 274 |
+| — Animaux | 1 151 891 | 14 180 |
+| — Plantes | 348 210 | 9 110 |
+| — Champignons | 201 049 | 1 842 |
+| — Algues et protistes | 53 596 | 142 |
+| Virus | 80 011 | 186 |
+| **Total** | **2 436 560** | **25 545** |
+
+L'écart est le propos : 551 513 bactéries décrites, 76 photographiées. Ce que
+l'on voit du vivant n'est pas ce qu'il est.
+
+```bash
+python3 build_tree_stats.py     # -> tree_stats.json, ~20 s
 ```
-Bactéries     Bacteria             76
-Archées       Archaea               9
-Eucaryotes    Eukaryota        25 274
-   ├ Animaux      Metazoa       14 180
-   ├ Plantes      Viridiplantae  9 110
-   ├ Champignons  Fungi          1 842
-   └ Algues et protistes           142
-Virus                              186   (bordure discontinue : pas un domaine)
-```
+
+Ne comptent que les taxons de **rang `species`** : la taxonomie contient aussi
+les genres, familles et sous-espèces, et les additionner gonflerait les chiffres
+sans rien vouloir dire. Les virus sont reconnus par les suffixes ICTV, comme
+dans `data_pipeline.py`.
 
 #### « Procaryote » n'est pas une branche
 

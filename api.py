@@ -73,6 +73,7 @@ MAX_JOBS = 200
 
 DB_PATH = os.environ.get("BIODETECTIVE_DB", "biodetective.db")
 GENOME_STATS = "genome_stats.json"
+TREE_STATS = "tree_stats.json"
 
 # Historique des analyses. Persisté sur disque : une journée de démonstration
 # est longue et un redémarrage du backend ne doit pas l'effacer.
@@ -818,41 +819,43 @@ TREE = {
     "domaines": [
         {
             "id": "bacteria", "nom": "Bactéries", "latin": "Bacteria",
-            "match": {"superkingdom": ["Bacteria"]},
+            "match": {"superkingdom": ["Bacteria"]}, "stat": "bacteria",
             "phrase": "Une seule cellule, sans noyau. Les êtres vivants les "
                       "plus nombreux de la planète — il y en a plus dans ta "
                       "bouche que d'humains sur Terre.",
         },
         {
             "id": "archaea", "nom": "Archées", "latin": "Archaea",
-            "match": {"superkingdom": ["Archaea"]},
+            "match": {"superkingdom": ["Archaea"]}, "stat": "archaea",
             "phrase": "Elles ressemblent à des bactéries mais forment une "
                       "branche à part. Beaucoup vivent là où rien d'autre ne "
                       "tient : sources brûlantes, lacs salés.",
         },
         {
             "id": "eukaryota", "nom": "Eucaryotes", "latin": "Eukaryota",
-            "match": {"superkingdom": ["Eukaryota"]},
+            "match": {"superkingdom": ["Eukaryota"]}, "stat": "eukaryota",
             "phrase": "Leurs cellules rangent l'ADN dans un noyau. Nous en "
                       "faisons partie, avec les animaux, les plantes et les "
                       "champignons.",
             "enfants": [
                 {"id": "metazoa", "nom": "Animaux", "latin": "Metazoa",
-                 "match": {"kingdom": ["Metazoa"]},
+                 "match": {"kingdom": ["Metazoa"]}, "stat": "metazoa",
                  "phrase": "Ils mangent d'autres êtres vivants et se "
                            "déplacent, au moins un moment de leur vie."},
                 {"id": "plantae", "nom": "Plantes", "latin": "Viridiplantae",
                  "match": {"kingdom": ["Viridiplantae"]},
+                 "stat": "viridiplantae",
                  "phrase": "Elles fabriquent leur nourriture avec la lumière "
                            "du soleil."},
                 {"id": "fungi", "nom": "Champignons", "latin": "Fungi",
-                 "match": {"kingdom": ["Fungi"]},
+                 "match": {"kingdom": ["Fungi"]}, "stat": "fungi",
                  "phrase": "Ni plantes ni animaux : ils digèrent leur "
                            "nourriture autour d'eux, puis l'absorbent."},
                 {"id": "protistes", "nom": "Algues et protistes",
                  "latin": "autres eucaryotes",
                  "match": {"kingdom_not": ["Metazoa", "Viridiplantae",
                                            "Fungi"]},
+                 "stat": "autres_eucaryotes",
                  "phrase": "Tout le reste : algues rouges et brunes, "
                            "diatomées, amibes. Souvent minuscules, souvent "
                            "oubliés."},
@@ -860,7 +863,7 @@ TREE = {
         },
     ],
     "a_part": {
-        "id": "virus", "nom": "Virus", "latin": "Virus",
+        "id": "virus", "nom": "Virus", "latin": "Virus", "stat": "viruses",
         "phrase": "Ni tout à fait vivants, ni tout à fait inertes. Ils n'ont "
                   "pas de cellule et doivent en emprunter une pour se "
                   "reproduire.",
@@ -888,7 +891,17 @@ def _tree_where(match):
     return ("1=0", [])
 
 
-def _tree_node(conn, node):
+def load_tree_stats():
+    """Espèces décrites par grand groupe, produites par build_tree_stats.py."""
+    if not os.path.exists(TREE_STATS):
+        log.warning("%s absent : l'arbre n'affichera que notre collection",
+                    TREE_STATS)
+        return {}
+    with open(TREE_STATS, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _tree_node(conn, node, stats):
     where, args = _tree_where(node["match"])
     n = conn.execute(
         f"SELECT count(*) FROM organisms WHERE {where}", args).fetchone()[0]
@@ -899,6 +912,9 @@ def _tree_node(conn, node):
         f"FROM organisms WHERE ({where}) AND image_path IS NOT NULL "
         f"ORDER BY RANDOM() LIMIT 1", args).fetchone()
     out = {k: node[k] for k in ("id", "nom", "latin", "phrase")}
+    # « décrites » : le nombre d'espèces connues de la science. « en photo » :
+    # ce que nous savons illustrer. L'écart est énorme, et il est parlant.
+    out["described"] = stats.get(node.get("stat", ""))
     out["count"] = n
     out["exemple"] = {
         "nom": (row["common_name_fr"] or row["common_name_en"]
@@ -912,11 +928,13 @@ def _tree_node(conn, node):
 @api.get("/tree")
 def tree():
     """L'arbre du vivant, avec les effectifs réels de notre collection."""
+    stats = load_tree_stats()
     with connect() as conn:
         domaines = []
         for d in TREE["domaines"]:
-            node = _tree_node(conn, d)
-            node["enfants"] = [_tree_node(conn, c) for c in d.get("enfants", [])]
+            node = _tree_node(conn, d, stats)
+            node["enfants"] = [_tree_node(conn, c, stats)
+                               for c in d.get("enfants", [])]
             domaines.append(node)
 
         # Les virus se répartissent sur plusieurs realms (-viria) : on les
@@ -932,6 +950,7 @@ def tree():
         total = conn.execute("SELECT count(*) FROM organisms").fetchone()[0]
 
     a_part = dict(TREE["a_part"])
+    a_part["described"] = stats.get("viruses")
     a_part["count"] = viruses
     a_part["exemple"] = {
         "nom": (vrow["common_name_fr"] or vrow["common_name_en"]
@@ -940,8 +959,9 @@ def tree():
         "image": vrow["image_path"],
     } if vrow else None
 
-    return {"total": total, "domaines": domaines, "a_part": a_part,
-            "note": TREE["note"]}
+    return {"total": total,
+            "total_described": stats.get("total_species"),
+            "domaines": domaines, "a_part": a_part, "note": TREE["note"]}
 
 
 @api.get("/history")
