@@ -1,20 +1,17 @@
 # CLAUDE.md - Guide de développement BioDetective
 
-## ⚠️ État du projet : RIEN N'EST ENCORE IMPLÉMENTÉ
+## ⚠️ État du projet : BACKEND DE DONNÉES FAIT, API ET FRONTEND À FAIRE
 
-Ce fichier est un **cahier des charges**, pas la documentation d'un code existant.
-Au 25 août 2026, le répertoire contient uniquement :
+Ce fichier a d'abord été un cahier des charges. Une partie est maintenant réelle.
 
-```
-Biodetective/
-├── CLAUDE.md              ← ce fichier
-├── new_taxdump.tar.gz     (159 Mo, archive NCBI)
-└── new_taxdump/           (15 fichiers .dmp décompressés)
-```
+**Fait :**
+- `data_pipeline.py` → `biodetective.db` (25 545 organismes, ~6 s de construction)
+- `common_names_fr.json` → 33 noms français
+- `sequences.json` → table de correspondance de la démo (33 organismes)
+- `identify.py` → normalisation + recherche exacte
+- `validate_sequences.py` → contrôle avant démo
 
-**Aucun** des fichiers décrits plus bas (`api.py`, `data_pipeline.py`, `biodetective.db`,
-`src/`, `public/`, `package.json`, `requirements.txt`) n'existe encore.
-Le répertoire **n'est pas non plus un dépôt git** — penser à `git init`.
+**À faire :** `api.py` (FastAPI), tout le frontend React (`src/`, `public/`, `package.json`).
 
 Voir la [Roadmap](#-roadmap-ordre-de-construction) en fin de fichier pour l'ordre de construction.
 
@@ -47,31 +44,32 @@ Conséquences à ne jamais oublier en codant :
 
 ---
 
-## 🏗️ Architecture cible
+## 🏗️ Architecture
 
 ```
 Biodetective/
-├── api.py                   # API FastAPI (backend)
-├── identify.py              # Logique d'identification (lookup sequences.json)
-├── data_pipeline.py         # Pipeline new_taxdump → SQLite
-├── sequences.json           # Table séquence → taxonomy_id (cœur de la démo)
-├── biodetective.db          # Base SQLite générée par data_pipeline.py
-├── requirements.txt         # Dépendances Python
-├── package.json             # Config React (proxy → localhost:8000)
-├── new_taxdump/             # Données NCBI (déjà présent)
-│   ├── names.dmp            # Noms scientifiques et communs
-│   ├── nodes.dmp            # Hiérarchie taxonomique
-│   ├── images.dmp           # Images (URLs)
-│   ├── rankedlineage.dmp    # Lignée par rang — raccourci utile
-│   └── … (11 autres .dmp non utilisés)
-├── src/                     # Frontend React
-│   ├── index.js             # Point d'entrée React
-│   ├── App.js               # Composant racine
-│   ├── BioDetective.js      # Composant principal
-│   ├── biodetective.css     # Styles CSS (thème futuriste)
-│   └── reportWebVitals.js   # Métriques de performance
+├── data_pipeline.py         # [FAIT] new_taxdump/ → biodetective.db
+├── common_names_fr.json     # [FAIT] taxid → nom français (maintenu à la main)
+├── sequences.json           # [FAIT] séquence → taxid (cœur de la démo)
+├── identify.py              # [FAIT] normalisation + recherche exacte
+├── validate_sequences.py    # [FAIT] contrôle avant démo
+├── biodetective.db          # [GÉNÉRÉ] 25 545 organismes, 11 Mo
+├── requirements.txt         # [FAIT]
+├── api.py                   # [À FAIRE] API FastAPI
+├── package.json             # [À FAIRE] config React (proxy → localhost:8000)
+├── new_taxdump/             # données NCBI (non versionnées)
+│   ├── names.dmp            # noms scientifiques et communs anglais
+│   ├── nodes.dmp            # rang de chaque taxon
+│   ├── images.dmp           # images — point d'entrée du pipeline
+│   ├── rankedlineage.dmp    # lignée éclatée par rang
+│   └── … (11 autres .dmp inutilisés)
+├── src/                     # [À FAIRE] frontend React
+│   ├── index.js
+│   ├── App.js
+│   ├── BioDetective.js
+│   └── biodetective.css
 └── public/
-    └── index.html           # Template HTML
+    └── index.html
 ```
 
 ---
@@ -217,24 +215,47 @@ Le backend attend donc **3 à 5 secondes** avant de passer le job en `completed`
 ## 🔑 Table de correspondance (`sequences.json`)
 
 C'est le fichier le plus important du projet : il décide de ce que voient les enfants.
+**33 organismes** y sont définis, tous vérifiés (taxid existant, image joignable).
 
 ```json
 {
-  "ATCGATCGGCTAGCTAGCTA": 562,
-  "GGCTATTAGCTCGATCGATC": 3702,
-  "TTACGGATCCGATTACGGAT": 9606
+  "sequences": [
+    {
+      "sequence": "AACTGCAGCAAGGTAT",
+      "taxonomy_id": 3702,
+      "nom_fr": "Arabette des dames",
+      "nom_scientifique": "Arabidopsis thaliana",
+      "type": "Plante à fleurs"
+    }
+  ]
 }
 ```
 
+Une liste d'objets plutôt qu'un dictionnaire plat : `nom_fr` permet de relire et corriger
+le fichier sans avoir à résoudre les taxids de tête.
+
 ### Règles
-- **Normalisation avant comparaison** : majuscules, suppression de tous les espaces,
-  retours à la ligne et tabulations. Un enfant colle rarement une chaîne propre.
-- Accepter uniquement `A`, `T`, `C`, `G` après normalisation. Tout autre caractère → `status: "error"`
-  avec un message compréhensible (« Cette séquence contient des lettres qui ne sont pas de l'ADN »).
-- Chaque `taxonomy_id` référencé **doit** exister dans `biodetective.db` **et** avoir une image.
-  Prévoir un script de validation qui vérifie ça, sinon on découvre le trou pendant la démo.
-- Choisir des organismes à **fort impact visuel** (photo nette, animal ou plante reconnaissable)
-  plutôt que des bactéries grises.
+- **Séquences de 16 bases**, jamais plus de **2 briques identiques d'affilée**. Cette
+  contrainte n'est pas cosmétique : devant quatre briques identiques un enfant en compte
+  trois ou cinq, et la séquence saisie ne correspond plus à rien.
+- **Normalisation avant comparaison** (`identify.normalize`) : majuscules, suppression des
+  espaces et retours à la ligne, en-tête FASTA `>` ignoré, `U` d'ARN converti en `T`.
+- Seuls `A`, `T`, `C`, `G` sont acceptés ensuite ; sinon `SequenceError` dont le message est
+  directement affichable (« Cette séquence contient des lettres qui ne sont pas de l'ADN : … »).
+- Chaque `taxonomy_id` **doit** exister en base **et** avoir une image → `validate_sequences.py`.
+
+### Composition de la démo
+Plantes 8 (dont *Arabidopsis thaliana* et *Physcomitrium patens*, les modèles de l'IBMP),
+mammifères 8, oiseaux 3 (dont la cigogne blanche, clin d'œil alsacien), insectes 4,
+monde marin 5, plus amanite, salamandre, *E. coli*, levure et *Chlamydomonas*.
+
+### Avant chaque démo
+```bash
+python3 validate_sequences.py --images
+```
+Vérifie les doublons, les runs de briques, les taxids, les images, et signale les images
+lourdes. **5 images dépassent 1 Mo** (salamandre 5,6 Mo, tortue verte 2,7 Mo, séquoia 1,7 Mo,
+amanite 1,5 Mo, pieuvre 1,2 Mo) : à précharger, sinon l'affichage traîne.
 
 ---
 
@@ -245,7 +266,7 @@ C'est le fichier le plus important du projet : il décide de ce que voient les e
 CREATE TABLE organisms (
     taxonomy_id INTEGER PRIMARY KEY,    -- NCBI Taxonomy ID
     scientific_name TEXT NOT NULL,       -- Nom scientifique binomial
-    common_name_fr TEXT,                 -- Nom commun français (VIDE, voir plus bas)
+    common_name_fr TEXT,                 -- Nom commun français (33 renseignés, voir plus bas)
     common_name_en TEXT,                 -- Nom commun anglais (depuis names.dmp)
     kingdom TEXT,                        -- Règne
     phylum TEXT,                         -- Embranchement
@@ -285,9 +306,15 @@ Les colonnes sont créées dès maintenant pour ne pas avoir à migrer le schém
 mais **le composant React doit masquer toute ligne dont la valeur est NULL ou vide**.
 Une fiche avec sept champs « — » est pire que pas de fiche.
 
-### `common_name_fr` sera vide aussi
-`names.dmp` ne contient quasiment que des noms communs anglais (`genbank common name`).
-Ne pas espérer remplir le français depuis le taxdump.
+### `common_name_fr` vient d'un fichier à part
+`names.dmp` ne contient quasiment que des noms communs anglais (`genbank common name`) :
+**0 nom français** sur 25 545 organismes. Les noms français sont donc maintenus à la main
+dans `common_names_fr.json` (taxid → nom), relu par `data_pipeline.py` à chaque construction.
+Actuellement **33 renseignés** — les organismes de la démo. En ajouter = éditer ce fichier
+et relancer le pipeline.
+
+`common_name_en` est en revanche rempli pour **8 471 organismes** (33 %), donc l'anglais
+peut servir de repli quand le français manque.
 
 ### Table `phylogenetic_tree` (non prioritaire)
 ```sql
@@ -504,9 +531,9 @@ Idem `Wikimedia Commons` (22 130) vs `Wikimedia  Commons` (double espace, 2) vs
 
 ## 🗺️ Roadmap (ordre de construction)
 
-1. `git init` + `.gitignore` (exclure `new_taxdump/`, `*.tar.gz`, `biodetective.db`, `node_modules/`)
-2. `data_pipeline.py` → `biodetective.db` — **tout le reste en dépend**
-3. `sequences.json` + `identify.py` + son script de validation
+1. ~~`git init` + `.gitignore`~~ ✅
+2. ~~`data_pipeline.py` → `biodetective.db`~~ ✅
+3. ~~`sequences.json` + `identify.py` + `validate_sequences.py`~~ ✅
 4. `api.py` : `/`, `/stats`, `/organism/{id}` (vérifiables au navigateur)
 5. `api.py` : `/analyze` + polling + `/random-images`
 6. Frontend : accueil → recherche → résultat

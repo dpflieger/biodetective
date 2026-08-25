@@ -12,6 +12,7 @@ Usage :
 """
 
 import argparse
+import json
 import logging
 import os
 import sqlite3
@@ -21,6 +22,7 @@ from collections import Counter
 
 TAXDUMP_DIR = "new_taxdump"
 DEFAULT_DB = "biodetective.db"
+NAMES_FR = "common_names_fr.json"
 
 SEP = "\t|\t"       # séparateur de champs des .dmp NCBI
 ROW_END = "\t|"     # fin de ligne des .dmp NCBI
@@ -168,6 +170,23 @@ def load_lineages(path, wanted):
     return out
 
 
+def load_common_names_fr(path):
+    """taxid -> nom français, depuis un fichier maintenu à la main.
+
+    Le taxdump NCBI ne contient quasiment aucun nom commun français
+    (les 'genbank common name' sont anglais). Les noms français vivent donc
+    dans common_names_fr.json, à part, pour survivre à une reconstruction
+    de la base. Fichier absent = base construite sans noms français.
+    """
+    if not os.path.exists(path):
+        log.warning("%s absent : aucun nom français ne sera renseigné", path)
+        return {}
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    log.info("%s : %d noms français", path, len(data))
+    return {str(k): v for k, v in data.items()}
+
+
 def load_ranks(path, wanted):
     """taxid -> rang ('species', 'genus', ...) depuis nodes.dmp."""
     out = {}
@@ -211,6 +230,10 @@ TYPE_RULES = [
     ("class", "Testudines",        "Tortue"),
     ("class", "Crocodylia",        "Crocodile"),
     ("class", "Amphibia",          "Amphibien"),
+    # Tunicier : Chordata mais pas vertébré, le repli par embranchement
+    # les classerait à tort en « Vertébré ».
+    ("class", "Ascidiacea",        "Animal marin"),
+    ("class", "Thaliacea",         "Animal marin"),
 
     # --- Invertébrés -----------------------------------------------------
     ("class", "Insecta",           "Insecte"),
@@ -264,6 +287,14 @@ TYPE_RULES = [
     ("class", "Candelariomycetes", "Lichen"),
     ("class", "Agaricomycetes",    "Champignon"),
     ("class", "Saccharomycetes",   "Levure"),
+
+    # --- Règles par ordre ------------------------------------------------
+    # Le NCBI n'attribue pas de rang « classe » aux tortues ni aux crocodiles :
+    # Testudines et Crocodylia sont des ordres, la colonne classe est vide.
+    ("order", "Testudines",        "Tortue"),
+    ("order", "Crocodylia",        "Crocodile"),
+    ("order", "Ceratodontiformes", "Poisson"),
+    ("order", "Coelacanthiformes", "Poisson"),
 
     # --- Repli par embranchement ----------------------------------------
     ("phylum", "Arthropoda",       "Arthropode"),
@@ -406,6 +437,7 @@ def build(db_path, taxdump_dir):
     sci, common_en = load_names(names_path, wanted)
     lineages = load_lineages(ranked_path, wanted)
     ranks = load_ranks(nodes_path, wanted)
+    names_fr = load_common_names_fr(NAMES_FR)
 
     rows, skipped = [], 0
     type_counts = Counter()
@@ -429,7 +461,7 @@ def build(db_path, taxdump_dir):
         url, license_, attribution, source = images[taxid]
 
         rows.append((
-            int(taxid), name, None, common_en.get(taxid),
+            int(taxid), name, names_fr.get(taxid), common_en.get(taxid),
             lin.get("kingdom") or None, lin.get("phylum") or None,
             lin.get("class") or None, lin.get("order") or None,
             lin.get("family") or None, lin.get("genus") or None,
@@ -453,6 +485,8 @@ def build(db_path, taxdump_dir):
     log.info("Types les plus fréquents :")
     for label, n in type_counts.most_common(15):
         log.info("    %-22s %6d", label, n)
+    matched_fr = sum(1 for r in rows if r[2])
+    log.info("Noms français renseignés : %d / %d", matched_fr, len(rows))
     unknown = type_counts.get("Organisme", 0)
     if unknown:
         log.warning("%d organismes non classés -> compléter TYPE_RULES", unknown)
