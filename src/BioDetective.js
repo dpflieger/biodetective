@@ -196,6 +196,9 @@ export default function BioDetective() {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [elapsed, setElapsed] = useState(null);
   const [blast, setBlast] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [histStats, setHistStats] = useState(null);
+  const [fromHistory, setFromHistory] = useState(false);
 
   // Tous les intervalles vivent ici : un timer oublié continue de tourner
   // en fond et fait clignoter l'écran de résultat.
@@ -281,8 +284,23 @@ export default function BioDetective() {
     el.src = montage.file;
   }, [montage]);
 
+  const loadHistory = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/history?limit=10&matched_only=true`);
+      const d = await r.json();
+      setHistory(d.entries || []);
+      setHistStats({ total: d.total, found: d.found, unknown: d.unknown });
+    } catch {
+      /* l'historique est un bonus, jamais un blocage */
+    }
+  }, []);
+
+  useEffect(() => { loadHistory(); }, [loadHistory]);
+
   const reset = useCallback(() => {
     clearAllIntervals();
+    loadHistory();
+    setFromHistory(false);
     if (montages.length) {
       setMontage(montages[Math.floor(Math.random() * montages.length)]);
     }
@@ -292,7 +310,27 @@ export default function BioDetective() {
     setErrorMessage('');
     setImageLoaded(false);
     setScreen('home');
-  }, [clearAllIntervals, montages]);
+  }, [clearAllIntervals, montages, loadHistory]);
+
+  // Réaffiche une analyse passée sans relancer BLAST : l'enfant qui revient
+  // avec ses parents veut revoir son organisme, pas refaire la queue.
+  const showPast = useCallback(async (index) => {
+    try {
+      const r = await fetch(`${API}/history/${index}`);
+      if (!r.ok) return;
+      const job = await r.json();
+      clearAllIntervals();
+      setAnalysed(job.sequence || '');
+      setElapsed(job.analysis_time || null);
+      setBlast(job.blast || null);
+      setOrganism(job.organism);
+      setImageLoaded(false);
+      setFromHistory(true);
+      setScreen(job.matched && job.organism ? 'result' : 'unknown');
+    } catch {
+      /* sans effet : on reste sur l'accueil */
+    }
+  }, [clearAllIntervals]);
 
   const fail = useCallback(
     (msg) => {
@@ -435,6 +473,39 @@ export default function BioDetective() {
         </button>
       </div>
 
+      {history.length > 0 && (
+        <div className="recent">
+          <div className="recent__head">
+            <span>Dernières découvertes</span>
+            {histStats && (
+              <span className="recent__count">
+                {histStats.total} analyse{histStats.total > 1 ? 's' : ''}
+                {' · '}
+                {histStats.found} organisme{histStats.found > 1 ? 's' : ''} identifié
+                {histStats.found > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          <div className="recent__row">
+            {history.map((h) => (
+              <button
+                key={`${h.index}-${h.at}`}
+                className="recent__item"
+                onClick={() => showPast(h.index)}
+                title={`${h.scientific_name} — ${h.percent_identity} %`}
+              >
+                <img
+                  src={h.image || PLACEHOLDER}
+                  alt=""
+                  onError={(e) => { e.target.src = PLACEHOLDER; }}
+                />
+                <span className="recent__name">{h.display_name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className={`api-status api-status--${apiOk === false ? 'ko' : apiOk ? 'ok' : 'wait'}`}>
         {apiOk === null && 'Connexion au serveur…'}
         {apiOk === true && 'Serveur connecté'}
@@ -514,6 +585,9 @@ export default function BioDetective() {
           </div>
 
           <div className="result__info">
+            {fromHistory && (
+              <div className="replay">Analyse déjà effectuée — historique</div>
+            )}
             <div className="identity">
               IDENTIFIÉ À{' '}
               {blast && blast.alignment

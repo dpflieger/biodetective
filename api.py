@@ -13,6 +13,7 @@ qu'elles font.
 """
 
 import asyncio
+import json
 import logging
 import os
 import random
@@ -70,6 +71,11 @@ IMAGE_POOL_SIZE = 400
 MAX_JOBS = 200
 
 DB_PATH = os.environ.get("BIODETECTIVE_DB", "biodetective.db")
+
+# Historique des analyses. Persisté sur disque : une journée de démonstration
+# est longue et un redémarrage du backend ne doit pas l'effacer.
+HISTORY_FILE = os.environ.get("BIODETECTIVE_HISTORY", "history.json")
+HISTORY_MAX = 40
 # Frontend compilé par « npm run build ». Absent = mode développement,
 # où react-scripts sert l'interface sur le port 3000.
 BUILD_DIR = os.environ.get("BIODETECTIVE_BUILD", "build")
@@ -154,6 +160,7 @@ class State:
     image_pool: list = []
     jobs: dict = {}
     organism_count: int = 0
+    history: list = []
 
 
 state = State()
@@ -169,6 +176,47 @@ def organisms_by_taxid(taxids):
             f"SELECT * FROM organisms WHERE taxonomy_id IN ({marks})",
             list(taxids)).fetchall()
     return {r["taxonomy_id"]: organism_dict(r) for r in rows}
+
+
+def load_history():
+    if not os.path.exists(HISTORY_FILE):
+        return []
+    try:
+        with open(HISTORY_FILE, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data.get("entries", [])[:HISTORY_MAX]
+    except (OSError, ValueError) as exc:
+        # Un historique corrompu ne doit pas empêcher l'application de
+        # démarrer devant une file d'enfants.
+        log.warning("Historique illisible (%s), on repart de zéro", exc)
+        return []
+
+
+def save_history():
+    """Écriture atomique : un arrêt brutal ne laisse pas un fichier tronqué."""
+    tmp = HISTORY_FILE + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({"entries": state.history}, fh, ensure_ascii=False)
+        os.replace(tmp, HISTORY_FILE)
+    except OSError as exc:
+        log.warning("Historique non enregistré : %s", exc)
+
+
+def record_history(job):
+    """Ajoute une analyse terminée en tête de l'historique."""
+    o = job.get("organism")
+    entry = {
+        "at": time.time(),
+        "sequence": job["sequence"],
+        "matched": bool(job.get("matched")),
+        "analysis_time": job.get("analysis_time"),
+        "organism": o,
+        "blast": job.get("blast"),
+    }
+    state.history.insert(0, entry)
+    del state.history[HISTORY_MAX:]
+    save_history()
 
 
 def load_image_pool():
@@ -206,6 +254,7 @@ async def lifespan(app: FastAPI):
 
     state.identifier = Identifier()
     state.image_pool = load_image_pool()
+    state.history = load_history()
 
     if not blast_search.blast_available():
         log.error("blastn introuvable : aucune analyse ne pourra aboutir.")
@@ -219,6 +268,8 @@ async def lifespan(app: FastAPI):
     log.info("Base    : %s (%d organismes)", DB_PATH, state.organism_count)
     log.info("Démo    : %d séquences connues", len(state.identifier))
     log.info("Images  : pool de %d en mémoire", len(state.image_pool))
+    log.info("Histori.: %d analyses reprises de %s",
+             len(state.history), HISTORY_FILE)
     if ANALYSIS_FIXED_SECONDS is not None:
         log.info("Durée   : fixée à %.1f s", ANALYSIS_FIXED_SECONDS)
     else:
@@ -430,6 +481,10 @@ async def run_analysis(job_id: str, sequence: str):
         log.exception("[%s] échec de l'analyse : %s", job_id[:8], exc)
     finally:
         job["analysis_time"] = round(time.time() - job["started_at"], 2)
+        # Même une séquence inconnue mérite sa ligne : c'est le cas le plus
+        # fréquent, et l'opérateur veut savoir combien d'enfants sont passés.
+        if job["status"] != "running":
+            record_history(job)
 
 
 def job_payload(job):
@@ -486,6 +541,67 @@ def analyze_delete(job_id: str):
     if state.jobs.pop(job_id, None) is None:
         raise HTTPException(404, "Analyse inconnue.")
     return {"deleted": job_id}
+
+
+@api.get("/history")
+def history(limit: int = 12, matched_only: bool = False):
+    """Dernières analyses, la plus récente en tête."""
+    limit = max(1, min(limit, HISTORY_MAX))
+    # L'index est celui de la liste complète : le frontend filtre parfois sur
+    # les seules réussites, et un clic doit retrouver la bonne analyse.
+    rows = [(i, h) for i, h in enumerate(state.history)
+            if h["matched"] or not matched_only]
+    out = []
+    for i, h in rows[:limit]:
+        o = h.get("organism") or {}
+        out.append({
+            "index": i,
+            "at": h["at"],
+            "sequence": h["sequence"],
+            "matched": h["matched"],
+            "analysis_time": h.get("analysis_time"),
+            "taxonomy_id": o.get("taxonomy_id"),
+            "display_name": o.get("display_name"),
+            "scientific_name": o.get("scientific_name"),
+            "organism_type": o.get("organism_type"),
+            "image": (o.get("image") or {}).get("url"),
+            "percent_identity": ((h.get("blast") or {}).get("alignment")
+                                 or {}).get("percent_identity"),
+        })
+    found = sum(1 for h in state.history if h["matched"])
+    return {
+        "entries": out,
+        "total": len(state.history),
+        "found": found,
+        "unknown": len(state.history) - found,
+    }
+
+
+@api.get("/history/{index}")
+def history_entry(index: int):
+    """Détail complet d'une analyse passée, pour la réafficher à l'écran."""
+    if not 0 <= index < len(state.history):
+        raise HTTPException(404, "Analyse absente de l'historique.")
+    h = state.history[index]
+    return {
+        "status": "completed",
+        "matched": h["matched"],
+        "organism": h.get("organism"),
+        "blast": h.get("blast"),
+        "sequence": h["sequence"],
+        "analysis_time": h.get("analysis_time"),
+        "from_history": True,
+    }
+
+
+@api.delete("/history")
+def history_clear():
+    """Vide l'historique — entre deux groupes, ou en fin de journée."""
+    n = len(state.history)
+    state.history = []
+    save_history()
+    log.info("Historique vidé (%d analyses)", n)
+    return {"cleared": n}
 
 
 @api.post("/reload")

@@ -201,6 +201,9 @@ le frontend compilé.
 | GET | `/api/analyze/{job_id}` | Récupérer le résultat d'un job |
 | DELETE | `/api/analyze/{job_id}` | Supprimer un job |
 | GET | `/api/organism/{taxonomy_id}` | Détails d'un organisme |
+| GET | `/api/history?limit=12&matched_only=` | Dernières analyses |
+| GET | `/api/history/{index}` | Détail d'une analyse passée, pour la rejouer |
+| DELETE | `/api/history` | Vider l'historique |
 | POST | `/api/reload` | Recharger `sequences.json` sans redémarrer |
 | GET | `/` | Frontend compilé (ou message d'aide si `build/` absent) |
 | GET | `/docs` | Documentation interactive FastAPI |
@@ -559,6 +562,32 @@ image via `/api/random-images` : dégradé mais fonctionnel.
 
 ---
 
+### Historique des analyses
+
+Les 40 dernières analyses sont conservées dans `history.json`, **écrit sur
+disque** : une journée de démonstration est longue et un redémarrage du backend
+ne doit pas l'effacer. L'écriture est atomique (fichier temporaire puis
+`os.replace`), pour qu'un arrêt brutal ne laisse pas un fichier tronqué. Un
+historique illisible est ignoré avec un avertissement plutôt que d'empêcher
+l'application de démarrer devant une file d'enfants.
+
+Les séquences inconnues **y figurent aussi** : c'est le cas le plus fréquent, et
+l'opérateur veut savoir combien d'enfants sont passés, pas seulement combien ont
+réussi. L'écran d'accueil n'affiche en revanche que les organismes identifiés
+(`matched_only=true`), les vignettes étant là pour donner envie.
+
+Un clic sur une vignette **réaffiche l'analyse sans relancer BLAST** (~140 ms) :
+l'enfant qui revient avec ses parents veut revoir son organisme, pas refaire la
+queue. Chaque entrée porte son `index` dans la liste complète, pour que le
+filtrage sur les réussites ne décale pas les clics.
+
+Pour repartir de zéro entre deux groupes :
+```bash
+curl -X DELETE http://localhost:8000/api/history
+```
+
+---
+
 ## 🎨 Design System
 
 ### Palette de couleurs
@@ -704,7 +733,6 @@ Idem `Wikimedia Commons` (22 130) vs `Wikimedia  Commons` (double espace, 2) vs
 - [ ] **Noms communs français** — enrichissement via Wikidata API
 - [ ] **Images en local** — supprimer la dépendance au NCBI le jour J
 - [ ] **Arbre phylogénétique interactif** — SVG/D3.js avec la table `phylogenetic_tree`
-- [ ] **Historique des analyses** — garder les dernières séquences analysées
 - [ ] **Son/musique** — ambiance sonore pendant la recherche
 
 ---
