@@ -259,6 +259,7 @@ le frontend compilé.
 | GET | `/api/history?limit=12&matched_only=` | Dernières analyses |
 | GET | `/api/history/{index}` | Détail d'une analyse passée, pour la rejouer |
 | DELETE | `/api/history` | Vider l'historique |
+| POST | `/api/remote-blast` | BLAST distant chez le NCBI (lent, hors démo) |
 | POST | `/api/reload` | Recharger `sequences.json` sans redémarrer |
 | GET | `/` | Frontend compilé (ou message d'aide si `build/` absent) |
 | GET | `/docs` | Documentation interactive FastAPI |
@@ -702,6 +703,50 @@ Le comportement est correct, et l'exemple est joli à montrer.
 ⚠️ Cela ne fonctionne que si la banque contient des enregistrements
 génomiques. Avec l'ancienne extraction plafonnée à un marqueur par espèce, les
 positions se rapportaient à un ADNc de 785 pb et n'apprenaient rien.
+
+---
+
+### BLAST distant chez le NCBI
+
+`remote_blast.py` interroge le BLAST public du NCBI par son interface URL
+(`Put` → `SearchInfo` → `Get`). En ligne de commande ou par
+`POST /api/remote-blast`, dont le résultat se relit avec
+`GET /api/analyze/{job_id}`.
+
+```bash
+export BIODETECTIVE_NCBI_EMAIL="prenom.nom@exemple.fr"   # le NCBI le demande
+python3 remote_blast.py TCATTGTAAGATTGGAATAATTCAATTTCGACAT
+```
+
+**C'est un outil de vérification, jamais le moteur de la démonstration**, et la
+mesure le montre nettement.
+
+| | Banque locale | NCBI `core_nt` |
+|---|---|---|
+| Taille | 63 Mpb | 998 **G**pb |
+| Durée | ~0,3 s | **33 à 53 s** |
+| Brin « Lion », meilleur hit | *Panthera leo* | ***Panthera pardus*** (léopard) |
+| E-value | 1,1 × 10⁻⁶ | 0,11 |
+
+Deux raisons de garder la banque locale : la latence, sans commune mesure avec
+un écran de recherche de 2,5 à 13 s, et surtout **la justesse**. Vingt-quatre
+bases de COI sont partagées par tout le genre *Panthera* : contre `core_nt` le
+léopard sort avant le lion. Restreindre la banque aux espèces que l'on sait
+illustrer n'est pas qu'une économie, c'est ce qui rend la réponse juste.
+
+Deux pièges rencontrés en écrivant le client :
+
+- `ALIGNMENTS=0&DESCRIPTIONS=0` bornent le **nombre de lignes** rendues, pas
+  leur verbosité : à zéro, le résultat revient vide alors que la recherche a
+  trouvé.
+- `FORMAT_TYPE=Tabular` rend un corps vide sur cette interface. Le **XML** est
+  le format fiable, et il porte en prime les séquences alignées et la longueur
+  du sujet. Les accessions y sont **sans version** (`AY052207`) là où esummary
+  répond avec (`AY052207.1`) : indexer les deux formes, sinon aucun taxid ne
+  se résout.
+
+L'adresse de contact n'est transmise que si `BIODETECTIVE_NCBI_EMAIL` est
+définie ; rien n'est codé en dur.
 
 ---
 

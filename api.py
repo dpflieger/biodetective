@@ -31,6 +31,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import blast_search
+import remote_blast
 from identify import Identifier, SequenceError, normalize
 
 # --------------------------------------------------------------------------
@@ -245,6 +246,7 @@ def record_history(job):
         "organism": o,
         "blast": job.get("blast"),
         "blast_archive": job.get("blast_archive"),
+        "remote": job.get("remote"),
     }
     state.history.insert(0, entry)
     del state.history[HISTORY_MAX:]
@@ -597,6 +599,8 @@ def job_payload(job):
         "sequence": job["sequence"],
         "planned_duration": round(job.get("planned_duration", 0), 1),
         "blast": job.get("blast"),
+        "blast_archive": job.get("blast_archive"),
+        "remote": job.get("remote"),
         "analysis_time": job.get("analysis_time"),
         "error_message": job.get("error_message"),
     }
@@ -642,6 +646,70 @@ def analyze_delete(job_id: str):
     if state.jobs.pop(job_id, None) is None:
         raise HTTPException(404, "Analyse inconnue.")
     return {"deleted": job_id}
+
+
+async def run_remote(job_id, sequence):
+    """BLAST distant, en tâche de fond. Hors du parcours de démonstration."""
+    job = state.jobs[job_id]
+    try:
+        # urllib est bloquant : sans thread, l'API entière se figerait
+        # pendant la trentaine de secondes que dure la recherche.
+        hits, rid, elapsed = await asyncio.to_thread(
+            remote_blast.search, sequence, "core_nt", None, False)
+        fiches = organisms_by_taxid(
+            [h["taxonomy_id"] for h in hits[:10] if h.get("taxonomy_id")])
+        ranked = []
+        for h in hits[:10]:
+            o = fiches.get(h.get("taxonomy_id"))
+            ranked.append({
+                "accession": h["accession"],
+                "taxonomy_id": h.get("taxonomy_id"),
+                "scientific_name": o["scientific_name"] if o else None,
+                "display_name": o["display_name"] if o else None,
+                "subject_title": h.get("subject_title"),
+                "percent_identity": h["percent_identity"],
+                "coverage": h.get("coverage"),
+                "evalue": h["evalue"],
+                "bitscore": h["bitscore"],
+                "known_here": o is not None,
+            })
+        job.update(status="completed", matched=bool(hits), organism=None,
+                   remote={"rid": rid, "elapsed": round(elapsed, 1),
+                           "database": "core_nt", "hits": ranked,
+                           "total_hits": len(hits)})
+        log.info("[%s] distant : %d hits en %.0f s (RID %s)",
+                 job_id[:8], len(hits), elapsed, rid)
+    except Exception as exc:                          # noqa: BLE001
+        job.update(status="error",
+                   error_message=f"BLAST distant impossible : {exc}")
+        log.warning("[%s] distant en échec : %s", job_id[:8], exc)
+    finally:
+        job["analysis_time"] = round(time.time() - job["started_at"], 2)
+
+
+@api.post("/remote-blast")
+async def remote_blast_start(req: AnalyzeRequest):
+    """Soumet la séquence au BLAST public du NCBI.
+
+    ⚠️ Compter une trentaine de secondes, parfois des minutes : sans commune
+    mesure avec l'écran de recherche. Outil de vérification, pas de démo.
+    Le résultat se relit avec GET /api/analyze/{job_id}.
+    """
+    try:
+        sequence = normalize(req.sequence)
+    except SequenceError as exc:
+        raise HTTPException(400, str(exc))
+
+    job_id = str(uuid.uuid4())
+    state.jobs[job_id] = {
+        "job_id": job_id, "status": "running", "sequence": sequence,
+        "planned_duration": 0, "remote": None,
+        "created_at": time.time(), "started_at": time.time(),
+    }
+    purge_jobs()
+    asyncio.create_task(run_remote(job_id, sequence))
+    log.info("[%s] BLAST distant lancé : %s", job_id[:8], sequence)
+    return job_payload(state.jobs[job_id])
 
 
 @api.get("/history")
