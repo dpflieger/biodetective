@@ -29,6 +29,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import blast_search
 from identify import Identifier, SequenceError, normalize
 
 # --------------------------------------------------------------------------
@@ -158,6 +159,18 @@ class State:
 state = State()
 
 
+def organisms_by_taxid(taxids):
+    """Fiches de plusieurs organismes en une requête."""
+    if not taxids:
+        return {}
+    marks = ",".join("?" * len(taxids))
+    with connect() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM organisms WHERE taxonomy_id IN ({marks})",
+            list(taxids)).fetchall()
+    return {r["taxonomy_id"]: organism_dict(r) for r in rows}
+
+
 def load_image_pool():
     """Tire une fois pour toutes un pool d'images pour l'animation.
 
@@ -193,6 +206,15 @@ async def lifespan(app: FastAPI):
 
     state.identifier = Identifier()
     state.image_pool = load_image_pool()
+
+    if not blast_search.blast_available():
+        log.error("blastn introuvable : aucune analyse ne pourra aboutir.")
+    elif not blast_search.db_available():
+        log.error("Banque BLAST absente (%s). Voir CLAUDE.md.",
+                  blast_search.BLAST_DB)
+    else:
+        log.info("BLAST   : %s", blast_search.BLASTN)
+        log.info("Banque  : %s", blast_search.BLAST_DB)
 
     log.info("Base    : %s (%d organismes)", DB_PATH, state.organism_count)
     log.info("Démo    : %d séquences connues", len(state.identifier))
@@ -342,29 +364,65 @@ async def run_analysis(job_id: str, sequence: str):
     try:
         await asyncio.sleep(job["planned_duration"])
 
-        taxid = state.identifier.identify(sequence)
-        if taxid is None:
-            job.update(status="completed", matched=False, organism=None)
-            log.info("[%s] séquence inconnue : %s", job_id[:8], sequence)
+        hits = await blast_search.search(sequence)
+
+        # Une fiche par taxon touché, en une seule requête SQL.
+        fiches = organisms_by_taxid([h["taxonomy_id"] for h in hits[:10]])
+
+        ranked = []
+        for h in hits[:5]:
+            o = fiches.get(h["taxonomy_id"])
+            ranked.append({
+                "taxonomy_id": h["taxonomy_id"],
+                "accession": h["accession"],
+                "scientific_name": o["scientific_name"] if o else None,
+                "display_name": o["display_name"] if o else None,
+                "organism_type": o["organism_type"] if o else None,
+                "has_image": bool(o and o["image"]),
+                "percent_identity": h["percent_identity"],
+                "coverage": h["coverage"],
+                "evalue": h["evalue"],
+                "bitscore": h["bitscore"],
+                "confident": blast_search.is_confident(h),
+            })
+
+        # Le meilleur hit sûr ET dont on possède la fiche : inutile
+        # d'annoncer un organisme qu'on ne saurait pas illustrer.
+        best = next((h for h in hits
+                     if blast_search.is_confident(h)
+                     and fiches.get(h["taxonomy_id"])), None)
+
+        job["blast"] = {
+            "hits": ranked,
+            "total_hits": len(hits),
+            "alignment": None,
+        }
+        if best:
+            job["blast"]["alignment"] = {
+                "query_seq": best["query_seq"],
+                "midline": blast_search.midline(best["query_seq"],
+                                                best["subject_seq"]),
+                "subject_seq": best["subject_seq"],
+                "query_start": best["query_start"],
+                "query_end": best["query_end"],
+                "subject_start": best["subject_start"],
+                "subject_end": best["subject_end"],
+                "accession": best["accession"],
+                "percent_identity": best["percent_identity"],
+                "evalue": best["evalue"],
+                "bitscore": best["bitscore"],
+                "mismatches": best["mismatches"],
+                "gaps": best["gaps"],
+            }
+            job.update(status="completed", matched=True,
+                       organism=fiches[best["taxonomy_id"]])
+            log.info("[%s] %s -> %s  id %.1f%%  E %.2g", job_id[:8], sequence,
+                     fiches[best["taxonomy_id"]]["scientific_name"],
+                     best["percent_identity"], best["evalue"])
         else:
-            with connect() as conn:
-                row = conn.execute(
-                    "SELECT * FROM organisms WHERE taxonomy_id=?",
-                    (taxid,)).fetchone()
-            if row is None:
-                # sequences.json pointe vers un taxid absent : c'est une vraie
-                # panne de configuration, pas une séquence inconnue.
-                # validate_sequences.py existe pour l'éviter.
-                job.update(
-                    status="error",
-                    error_message=f"L'organisme {taxid} est introuvable en base.")
-                log.error("[%s] taxid %s absent — lancer validate_sequences.py",
-                          job_id[:8], taxid)
-            else:
-                job.update(status="completed", matched=True,
-                           organism=organism_dict(row))
-                log.info("[%s] %s -> %s", job_id[:8], sequence,
-                         row["scientific_name"])
+            job.update(status="completed", matched=False, organism=None)
+            log.info("[%s] %s -> aucun hit sûr (%d hits bruts)",
+                     job_id[:8], sequence, len(hits))
     except Exception as exc:                      # noqa: BLE001
         # Une exception non rattrapée laisserait le job en "running" et le
         # frontend tournerait indéfiniment. Mieux vaut une erreur affichée.
@@ -382,6 +440,7 @@ def job_payload(job):
         "organism": job.get("organism"),
         "sequence": job["sequence"],
         "planned_duration": round(job.get("planned_duration", 0), 1),
+        "blast": job.get("blast"),
         "analysis_time": job.get("analysis_time"),
         "error_message": job.get("error_message"),
     }

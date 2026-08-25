@@ -116,6 +116,58 @@ function DnaStrip({ sequence, size = 'normal' }) {
   );
 }
 
+/** Alignement BLAST, présenté comme dans un vrai rapport.
+
+   Chaque base de la requête est colorée en vert si elle correspond, en
+   orange sinon : un enfant repère instantanément sa brique mal placée. */
+function Alignment({ data }) {
+  if (!data) return null;
+  const q = data.query_seq.split('');
+  const m = data.midline.split('');
+  const t = data.subject_seq.split('');
+  return (
+    <div className="align">
+      <div className="align__head">
+        <span>Alignement avec {data.accession}</span>
+        <span>
+          {data.mismatches > 0
+            ? `${data.mismatches} différence${data.mismatches > 1 ? 's' : ''}`
+            : 'correspondance parfaite'}
+        </span>
+      </div>
+      <div className="align__body">
+        <div className="align__row">
+          <span className="align__label">Ta séquence</span>
+          <span className="align__pos">{data.query_start}</span>
+          <span className="align__seq">
+            {q.map((c, i) => (
+              <b key={i} className={m[i] === '|' ? 'ok' : 'ko'}>{c}</b>
+            ))}
+          </span>
+          <span className="align__pos">{data.query_end}</span>
+        </div>
+        <div className="align__row align__row--mid">
+          <span className="align__label" />
+          <span className="align__pos" />
+          <span className="align__seq">
+            {m.map((c, i) => <b key={i}>{c === '|' ? '|' : '\u00a0'}</b>)}
+          </span>
+        </div>
+        <div className="align__row">
+          <span className="align__label">ADN de référence</span>
+          <span className="align__pos">{data.subject_start}</span>
+          <span className="align__seq">
+            {t.map((c, i) => (
+              <b key={i} className={m[i] === '|' ? 'ok' : 'ko'}>{c}</b>
+            ))}
+          </span>
+          <span className="align__pos">{data.subject_end}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Une ligne de la fiche. Ne rend rien si la valeur est vide. */
 function Fact({ label, value }) {
   if (value === null || value === undefined || value === '') return null;
@@ -143,6 +195,7 @@ export default function BioDetective() {
   const [fact, setFact] = useState(DNA_FACTS[0]);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [elapsed, setElapsed] = useState(null);
+  const [blast, setBlast] = useState(null);
 
   // Tous les intervalles vivent ici : un timer oublié continue de tourner
   // en fond et fait clignoter l'écran de résultat.
@@ -255,6 +308,7 @@ export default function BioDetective() {
       clearAllIntervals();
       setAnalysed(job.sequence || '');
       setElapsed(job.analysis_time || null);
+      setBlast(job.blast || null);
       if (job.status === 'error') {
         fail(job.error_message || "L'analyse a échoué.");
       } else if (job.matched && job.organism) {
@@ -460,7 +514,13 @@ export default function BioDetective() {
           </div>
 
           <div className="result__info">
-            <div className="identity">IDENTIFIÉ À 100&nbsp;%</div>
+            <div className="identity">
+              IDENTIFIÉ À{' '}
+              {blast && blast.alignment
+                ? String(blast.alignment.percent_identity).replace('.', ',')
+                : '100'}
+              &nbsp;%
+            </div>
             <h2 className="result__name">{organism.display_name}</h2>
             <p className="result__sci">{organism.scientific_name}</p>
             <div className="badge">{organism.organism_type}</div>
@@ -479,6 +539,15 @@ export default function BioDetective() {
               <Fact label="Le savais-tu ?" value={organism.fun_facts} />
             </div>
 
+            {blast && blast.alignment && (
+              <p className="evalue">
+                E-value <strong>{blast.alignment.evalue.toExponential(1)}</strong>
+                <span className="evalue__hint">
+                  {' '}— probabilité que ce soit un hasard
+                </span>
+              </p>
+            )}
+
             <DnaStrip sequence={analysed} size="small" />
             {elapsed !== null && (
               <p className="result__timing">
@@ -491,6 +560,25 @@ export default function BioDetective() {
             </button>
           </div>
         </div>
+
+        <Alignment data={blast && blast.alignment} />
+
+        {blast && blast.hits && blast.hits.length > 1 && (
+          <div className="others">
+            <div className="others__title">
+              Autres correspondances trouvées ({blast.total_hits} au total)
+            </div>
+            {blast.hits.slice(1, 5).map((h) => (
+              <div className="others__row" key={h.accession}>
+                <span className="others__name">
+                  {h.display_name || h.scientific_name || h.accession}
+                </span>
+                <span className="others__num">{String(h.percent_identity).replace('.', ',')}&nbsp;%</span>
+                <span className="others__num">E {h.evalue.toExponential(0)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };

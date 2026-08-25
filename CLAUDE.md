@@ -29,25 +29,60 @@ Voir la [Roadmap](#-roadmap-ordre-de-construction) en fin de fichier pour l'ordr
 ### Concept
 Un séquenceur LEGO (Brickopore) génère des séquences ADN à partir de briques colorées. L'utilisateur colle cette séquence dans BioDetective, qui identifie l'organisme et affiche sa photo avec une fiche descriptive dans une interface futuriste façon série policière.
 
-### ⚠️ Pas de BLAST réel — décision assumée
+### Identification par BLAST réel
 
-L'identification se fait par **table de correspondance exacte** (`sequences.json`), pas par BLAST.
+L'identification passe par un **vrai blastn** contre une banque construite à
+partir de `nt`, restreinte aux espèces qui possèdent une image. On obtient donc
+un classement par E-value, un pourcentage d'identité réel et un alignement à
+montrer — bien plus parlant qu'un « 100 % » décrété.
 
-**Pourquoi :** les séquences du Brickopore font 20 à 100 bases. Contre une base comme `nt`
-(~10¹² lettres), un 20-mer parfait a une E-value attendue d'environ **35** — autrement dit
-`blastn-short` ne trouverait rien d'exploitable en dessous de ~45-50 bases, et les courts motifs
-conservés sont partagés par des milliers de taxons. Le « meilleur hit » serait souvent un
-organisme arbitraire et sans photo. La table de correspondance donne un résultat **déterministe** :
-on choisit à l'avance des espèces avec de belles photos et un fort intérêt pour les enfants.
+**Pourquoi une banque restreinte, et pas `nt` :** les brins du Brickopore font
+24 bases. Contre `nt` (~10¹² lettres) une requête aussi courte n'a aucune chance :
+la E-value attendue dépasse 1. Contre une banque de ~25 Mpb, elle tombe vers
+10⁻⁶. **La E-value est proportionnelle à la taille de la banque** — c'est la
+contrainte qui gouverne tout le reste, et la raison pour laquelle
+`extract_from_nt.py` ne prend qu'une séquence par espèce et rejette les génomes
+complets.
 
-Conséquences à ne jamais oublier en codant :
-- **BLAST+ n'est pas une dépendance.** Ne pas réintroduire `blastn`, `makeblastdb` ou la base `nt`.
-- Le pourcentage d'identité affiché vaut **toujours 100 %** (correspondance exacte).
-- L'API garde une **exécution asynchrone avec polling** alors qu'une recherche en table est
-  instantanée. C'est **volontaire** : l'attente est la mise en scène (images qui défilent,
-  barre de progression). Voir [Durée d'analyse variable](#durée-danalyse-variable).
+Mesuré sur une base simulée de 16 Mpb :
 
----
+| Longueur | Meilleur hit | E-value | Correct ? |
+|----------|--------------|---------|-----------|
+| 12 pb | une espèce au hasard | 1,6 | ✗ |
+| 16 pb | la bonne | 0,010 | ✓ |
+| **24 pb** | la bonne | **5,4 × 10⁻⁷** | ✓ |
+| 30 pb | la bonne | 2,3 × 10⁻¹⁰ | ✓ |
+
+12 briques est sous le plancher : une séquence sans rapport gagne. 24 est le
+compromis retenu entre impact à l'écran et nombre de briques à assembler.
+
+**Ce que BLAST apporte en plus :** une brique mal comptée sur 24 donne encore le
+bon organisme, à 95,8 % d'identité. La table de correspondance exacte, elle,
+échouait. C'était le principal risque de la démonstration.
+
+**Séquences inventées :** sur 8 brins de 24 briques tirés au hasard, aucun ne
+produit de hit jugé sûr. L'écran « séquence inconnue » reste donc le cas normal
+pour un enfant qui improvise.
+
+### Chaîne de construction de la banque
+
+```bash
+# 1. sur le serveur qui héberge nt
+python3 extract_from_nt.py --db /chemin/vers/nt --taxids taxids.txt
+#    -> biodetective_subset.fasta (~25 Mo), à rapatrier
+
+# 2. sur la machine de démonstration
+makeblastdb -in biodetective_subset.fasta -dbtype nucl -out blastdb/biodetective
+python3 make_strips.py --length 24     # brins réels, vérifiés par BLAST
+python3 validate_sequences.py          # contrôle avant démo
+```
+
+`taxids.txt` se régénère par
+`sqlite3 biodetective.db "SELECT taxonomy_id FROM organisms;" > taxids.txt`.
+
+⚠️ `blastn` vient de conda alors que `python3` est celui du système : il n'est
+donc pas dans le PATH. `blast_search.find_blastn()` va le chercher dans les
+emplacements conda usuels ; `BIODETECTIVE_BLASTN` force un chemin.
 
 ## 🏗️ Architecture
 

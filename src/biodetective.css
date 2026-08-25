@@ -433,6 +433,125 @@ body {
 
 .fact__value { text-align: right; }
 
+/* ----------------------------------------------------- alignement */
+
+.align {
+  margin-top: 2rem;
+  border: var(--border);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.align__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  background: rgba(0, 255, 136, 0.08);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+}
+
+/* L'alignement ne doit jamais faire déborder la page : c'est lui qui
+   défile, pas le document. */
+.align__body {
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+.align__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+.align__label {
+  width: 9rem;
+  flex: none;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  text-align: right;
+}
+
+.align__pos {
+  width: 3rem;
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  text-align: right;
+}
+
+.align__seq {
+  font-family: 'Courier New', monospace;
+  font-size: 1.15rem;
+  letter-spacing: 0.16em;
+}
+
+.align__seq b { font-weight: 700; }
+.align__seq b.ok { color: var(--color-primary); }
+.align__seq b.ko { color: var(--color-accent); }
+.align__row--mid .align__seq { color: var(--color-primary); opacity: 0.55; }
+
+.evalue {
+  margin: 0.75rem 0 0;
+  font-size: 0.95rem;
+  color: var(--color-muted);
+  letter-spacing: 0.06em;
+}
+
+.evalue strong {
+  color: var(--color-primary);
+  font-family: 'Courier New', monospace;
+  font-size: 1.05rem;
+}
+
+.evalue__hint { font-size: 0.8rem; opacity: 0.75; }
+
+/* -------------------------------------------- autres correspondances */
+
+.others { margin-top: 1.5rem; }
+
+.others__title {
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: 0.5rem;
+}
+
+.others__row {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(0, 255, 136, 0.12);
+  font-size: 0.95rem;
+}
+
+.others__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+
+.others__num {
+  flex: none;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  min-width: 5.5rem;
+  text-align: right;
+}
+
 /* ------------------------------------------------ séquence inconnue */
 
 .screen--unknown { text-align: center; }

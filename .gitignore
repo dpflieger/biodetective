@@ -24,3 +24,7 @@ build/
 .DS_Store
 public/montages/
 taxids.txt
+dev_subset.fasta
+biodetective_subset.fasta
+blastdb/
+chosen_accessions.txt

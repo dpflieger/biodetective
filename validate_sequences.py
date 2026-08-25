@@ -15,6 +15,7 @@ import argparse
 import sqlite3
 import sys
 
+import blast_search as bs
 from identify import Identifier, SequenceError, normalize
 
 DEFAULT_DB = "biodetective.db"
@@ -148,6 +149,36 @@ def main():
     if resolved:
         rep.line(OK, f"{len(resolved)}/{len(ident.entries)} organismes "
                      f"résolus avec une image")
+
+    # --- 3 bis. Chaque brin désigne-t-il bien son organisme ? -------------
+    rep.section("Vérification BLAST des brins")
+    if not bs.blast_available():
+        rep.line(FAIL, "blastn introuvable : aucune analyse ne fonctionnera")
+    elif not bs.db_available():
+        rep.line(FAIL, f"banque BLAST absente ({bs.BLAST_DB})")
+    else:
+        for e in ident.entries:
+            label = e.get("nom_fr", e["taxonomy_id"])
+            try:
+                hits = bs.search_sync(normalize(e["sequence"]))
+            except Exception as exc:                      # noqa: BLE001
+                rep.line(FAIL, f"{label} : BLAST a échoué ({exc})")
+                continue
+            if not hits:
+                rep.line(FAIL, f"{label} : aucun hit, ce brin ne donnera rien")
+                continue
+            top = hits[0]
+            if top["taxonomy_id"] != int(e["taxonomy_id"]):
+                rep.line(FAIL, f"{label} : BLAST place le taxid "
+                               f"{top['taxonomy_id']} en tête, pas "
+                               f"{e['taxonomy_id']}")
+            elif not bs.is_confident(top):
+                rep.line(WARN, f"{label} : hit peu sûr "
+                               f"(id {top['percent_identity']} %, "
+                               f"cov {top['coverage']} %)")
+            else:
+                rep.line(OK, f"{label} : id {top['percent_identity']} %, "
+                             f"E {top['evalue']:.1g}")
 
     # --- 4. Les images répondent (optionnel, réseau) ----------------------
     if args.images:
