@@ -397,6 +397,7 @@ CREATE TABLE organisms (
     scientific_name   TEXT NOT NULL,
     common_name_fr    TEXT,
     common_name_en    TEXT,
+    superkingdom      TEXT,
     kingdom           TEXT,
     phylum            TEXT,
     class_name        TEXT,
@@ -426,15 +427,16 @@ CREATE TABLE organisms (
 CREATE INDEX idx_scientific_name ON organisms(scientific_name);
 CREATE INDEX idx_organism_type   ON organisms(organism_type);
 CREATE INDEX idx_kingdom         ON organisms(kingdom);
+CREATE INDEX idx_superkingdom    ON organisms(superkingdom);
 """
 
 INSERT = """
 INSERT OR REPLACE INTO organisms (
     taxonomy_id, scientific_name, common_name_fr, common_name_en,
-    kingdom, phylum, class_name, order_name, family, genus, species,
+    superkingdom, kingdom, phylum, class_name, order_name, family, genus, species,
     organism_type, image_path, image_source, image_license, image_attribution,
     genome_size_mb, chromosome_count, assembly_accession
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 """
 
 
@@ -483,6 +485,7 @@ def build(db_path, taxdump_dir):
 
         rows.append((
             int(taxid), name, names_fr.get(taxid), common_en.get(taxid),
+            lin.get("superkingdom") or None,
             lin.get("kingdom") or None, lin.get("phylum") or None,
             lin.get("class") or None, lin.get("order") or None,
             lin.get("family") or None, lin.get("genus") or None,
@@ -509,7 +512,7 @@ def build(db_path, taxdump_dir):
     log.info("Types les plus fréquents :")
     for label, n in type_counts.most_common(15):
         log.info("    %-22s %6d", label, n)
-    with_genome = sum(1 for r in rows if r[16])
+    with_genome = sum(1 for r in rows if r[17])
     log.info("Génomes renseignés : %d / %d", with_genome, len(rows))
     matched_fr = sum(1 for r in rows if r[2])
     log.info("Noms français renseignés : %d / %d", matched_fr, len(rows))

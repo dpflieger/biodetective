@@ -634,6 +634,39 @@ et de le dessiner.
 
 ---
 
+### Écran « L'arbre du vivant »
+
+Accessible depuis l'accueil. Trois domaines, quelques grands groupes sous les
+eucaryotes, les virus à part — avec les **effectifs réels de la collection** et
+une vignette par groupe, tirée de la base.
+
+```
+Bactéries     Bacteria             76
+Archées       Archaea               9
+Eucaryotes    Eukaryota        25 274
+   ├ Animaux      Metazoa       14 180
+   ├ Plantes      Viridiplantae  9 110
+   ├ Champignons  Fungi          1 842
+   └ Algues et protistes           142
+Virus                              186   (bordure discontinue : pas un domaine)
+```
+
+#### « Procaryote » n'est pas une branche
+
+Le mot décrit une **cellule sans noyau** ; il ne désigne pas un groupe de
+parenté. Bactéries et archées sont deux domaines distincts, aussi éloignés
+l'un de l'autre qu'ils le sont de nous — les regrouper sur l'arbre laisserait
+croire à une parenté qui n'existe pas. L'écran l'explique dans un encadré
+plutôt que de faire du mot une branche.
+
+Les virus sont encadrés en pointillés, sans être rattachés à un domaine.
+
+`superkingdom` a été ajouté à `organisms` pour cet écran : le rang existait
+dans `rankedlineage.dmp` mais n'était pas repris. Relancer `data_pipeline.py`
+après mise à jour.
+
+---
+
 ### « Ses cousins » — la parenté déduite des hits
 
 Une liste de hits BLAST n'est pas une liste de mauvaises réponses : ce sont les

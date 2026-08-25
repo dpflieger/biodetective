@@ -528,6 +528,146 @@ body {
 
 .fact__value { text-align: right; }
 
+/* ------------------------------------------------- arbre du vivant */
+
+.screen--tree { max-width: 900px; }
+
+.tree__title {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(1.6rem, 4vw, 2.6rem);
+  letter-spacing: 0.14em;
+  color: var(--color-primary);
+  text-shadow: var(--glow);
+  text-align: center;
+  margin: 0 0 0.5rem;
+}
+
+.tree__lead {
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 1.05rem;
+  margin: 0 auto 2rem;
+  max-width: 620px;
+  line-height: 1.5;
+}
+
+.tree__body { display: flex; flex-direction: column; gap: 1.1rem; }
+
+.tdomain {
+  border: var(--border);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 0.9rem 1rem;
+}
+
+/* Les virus ne sont pas un domaine : bordure discontinue pour le dire
+   sans avoir à l'écrire deux fois. */
+.tdomain--apart {
+  border-style: dashed;
+  border-color: rgba(255, 107, 0, 0.4);
+}
+
+.tnode { display: flex; gap: 1rem; align-items: flex-start; }
+
+.tnode__img {
+  width: 76px;
+  height: 76px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 255, 136, 0.3);
+}
+
+.tnode__text { flex: 1; min-width: 0; }
+
+.tnode__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.tnode__nom {
+  font-family: 'Orbitron', monospace;
+  font-size: 1.15rem;
+  color: var(--color-primary);
+  letter-spacing: 0.06em;
+}
+
+.tnode__latin {
+  font-style: italic;
+  color: var(--color-secondary);
+  font-size: 0.9rem;
+}
+
+.tnode__count {
+  margin-left: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+.tnode__phrase {
+  margin: 0.3rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--color-text);
+  opacity: 0.88;
+}
+
+/* Les sous-groupes s'accrochent à une épine, comme les cousins. */
+.tdomain__kids {
+  margin: 0.9rem 0 0 2.4rem;
+  border-left: 2px solid rgba(0, 255, 136, 0.28);
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.tnode--groupe { position: relative; }
+
+.tnode--groupe::before {
+  content: '';
+  position: absolute;
+  left: -1.1rem;
+  top: 1.9rem;
+  width: 0.8rem;
+  height: 2px;
+  background: rgba(0, 255, 136, 0.28);
+}
+
+.tnode--groupe .tnode__img { width: 58px; height: 58px; }
+.tnode--groupe .tnode__nom { font-size: 0.98rem; }
+
+.tree__note {
+  margin: 1.8rem auto 0;
+  max-width: 680px;
+  padding: 0.85rem 1rem;
+  border-left: 3px solid var(--color-accent);
+  background: rgba(255, 107, 0, 0.07);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.screen--tree .btn { max-width: 320px; margin: 1.5rem auto 0; }
+
+.btn-link {
+  display: block;
+  margin: 1.25rem auto 0;
+  background: none;
+  border: none;
+  color: var(--color-secondary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.btn-link:hover { color: var(--color-primary); }
+
 /* --------------------------------------------------------- cousins */
 
 .cousins {

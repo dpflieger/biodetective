@@ -120,6 +120,75 @@ function DnaStrip({ sequence, size = 'normal' }) {
 const fmt = (n) =>
   typeof n === 'number' ? n.toLocaleString('fr-FR') : n;
 
+/** L'arbre du vivant, avec les effectifs réels de la collection.
+
+   Trois domaines, quelques grands groupes sous les eucaryotes, les virus
+   à part. « Procaryote » n'y est pas une branche : le mot décrit une
+   cellule sans noyau, il ne désigne pas un groupe de parenté. */
+function Tree({ data, onBack }) {
+  if (!data) {
+    return (
+      <div className="screen screen--tree">
+        <h2 className="tree__title">L'ARBRE DU VIVANT</h2>
+        <p className="tree__lead">Chargement…</p>
+      </div>
+    );
+  }
+
+  const node = (n, level) => (
+    <div className={`tnode tnode--${level}`} key={n.id}>
+      {n.exemple && (
+        <img
+          className="tnode__img"
+          src={n.exemple.image}
+          alt=""
+          title={`${n.exemple.nom} — ${n.exemple.scientific_name}`}
+          onError={(e) => { e.target.src = PLACEHOLDER; }}
+        />
+      )}
+      <div className="tnode__text">
+        <div className="tnode__head">
+          <span className="tnode__nom">{n.nom}</span>
+          <span className="tnode__latin">{n.latin}</span>
+          <span className="tnode__count">{fmt(n.count)}</span>
+        </div>
+        <p className="tnode__phrase">{n.phrase}</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="screen screen--tree">
+      <h2 className="tree__title">L'ARBRE DU VIVANT</h2>
+      <p className="tree__lead">
+        Les {fmt(data.total)} organismes de notre collection, rangés comme les
+        biologistes rangent le vivant : en trois grands domaines.
+      </p>
+
+      <div className="tree__body">
+        {data.domaines.map((d) => (
+          <div className="tdomain" key={d.id}>
+            {node(d, 'domaine')}
+            {d.enfants && d.enfants.length > 0 && (
+              <div className="tdomain__kids">
+                {d.enfants.map((c) => node(c, 'groupe'))}
+              </div>
+            )}
+          </div>
+        ))}
+
+        <div className="tdomain tdomain--apart">
+          {node(data.a_part, 'domaine')}
+        </div>
+      </div>
+
+      <p className="tree__note">{data.note}</p>
+
+      <button className="btn btn--accent" onClick={onBack}>RETOUR</button>
+    </div>
+  );
+}
+
 /** Les autres hits BLAST, présentés pour ce qu'ils sont : la parenté.
 
    Une liste de hits n'est pas une liste de « moins bonnes réponses ». Les
@@ -400,6 +469,7 @@ export default function BioDetective() {
   const [histStats, setHistStats] = useState(null);
   const [fromHistory, setFromHistory] = useState(false);
   const [jobId, setJobId] = useState(null);
+  const [tree, setTree] = useState(null);
 
   // Tous les intervalles vivent ici : un timer oublié continue de tourner
   // en fond et fait clignoter l'écran de résultat.
@@ -497,6 +567,18 @@ export default function BioDetective() {
   }, []);
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
+
+  const openTree = useCallback(async () => {
+    clearAllIntervals();
+    setScreen('tree');
+    if (tree) return;
+    try {
+      const r = await fetch(`${API}/tree`);
+      setTree(await r.json());
+    } catch {
+      /* l'écran affichera « Chargement… » : sans données, rien à montrer */
+    }
+  }, [tree, clearAllIntervals]);
 
   const reset = useCallback(() => {
     clearAllIntervals();
@@ -708,6 +790,10 @@ export default function BioDetective() {
         </div>
       )}
 
+      <button className="btn-link" onClick={openTree}>
+        🌳 Voir l'arbre du vivant
+      </button>
+
       <div className={`api-status api-status--${apiOk === false ? 'ko' : apiOk ? 'ok' : 'wait'}`}>
         {apiOk === null && 'Connexion au serveur…'}
         {apiOk === true && 'Serveur connecté'}
@@ -912,6 +998,7 @@ export default function BioDetective() {
       {screen === 'result' && renderResult()}
       {screen === 'unknown' && renderUnknown()}
       {screen === 'error' && renderError()}
+      {screen === 'tree' && <Tree data={tree} onBack={reset} />}
       <footer className="app__footer">
         Fête de la Science — IBMP Strasbourg · Brickopore
       </footer>

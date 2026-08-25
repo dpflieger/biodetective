@@ -806,6 +806,144 @@ def blast_report(job_id: str):
             "bytes": len(text), "report": text}
 
 
+# L'arbre du vivant tel qu'on le montre au public. Volontairement grossier :
+# trois domaines, quelques grands groupes sous les eucaryotes, les virus à
+# part. Chaque noeud dit à quoi le reconnaître, en une phrase.
+#
+# « Procaryote » n'y figure pas comme branche, et c'est délibéré : le mot
+# désigne une cellule sans noyau, pas un groupe de parenté. Bactéries et
+# archées sont deux domaines distincts, aussi éloignés l'un de l'autre que
+# de nous. Le terme est expliqué à part, comme une description.
+TREE = {
+    "domaines": [
+        {
+            "id": "bacteria", "nom": "Bactéries", "latin": "Bacteria",
+            "match": {"superkingdom": ["Bacteria"]},
+            "phrase": "Une seule cellule, sans noyau. Les êtres vivants les "
+                      "plus nombreux de la planète — il y en a plus dans ta "
+                      "bouche que d'humains sur Terre.",
+        },
+        {
+            "id": "archaea", "nom": "Archées", "latin": "Archaea",
+            "match": {"superkingdom": ["Archaea"]},
+            "phrase": "Elles ressemblent à des bactéries mais forment une "
+                      "branche à part. Beaucoup vivent là où rien d'autre ne "
+                      "tient : sources brûlantes, lacs salés.",
+        },
+        {
+            "id": "eukaryota", "nom": "Eucaryotes", "latin": "Eukaryota",
+            "match": {"superkingdom": ["Eukaryota"]},
+            "phrase": "Leurs cellules rangent l'ADN dans un noyau. Nous en "
+                      "faisons partie, avec les animaux, les plantes et les "
+                      "champignons.",
+            "enfants": [
+                {"id": "metazoa", "nom": "Animaux", "latin": "Metazoa",
+                 "match": {"kingdom": ["Metazoa"]},
+                 "phrase": "Ils mangent d'autres êtres vivants et se "
+                           "déplacent, au moins un moment de leur vie."},
+                {"id": "plantae", "nom": "Plantes", "latin": "Viridiplantae",
+                 "match": {"kingdom": ["Viridiplantae"]},
+                 "phrase": "Elles fabriquent leur nourriture avec la lumière "
+                           "du soleil."},
+                {"id": "fungi", "nom": "Champignons", "latin": "Fungi",
+                 "match": {"kingdom": ["Fungi"]},
+                 "phrase": "Ni plantes ni animaux : ils digèrent leur "
+                           "nourriture autour d'eux, puis l'absorbent."},
+                {"id": "protistes", "nom": "Algues et protistes",
+                 "latin": "autres eucaryotes",
+                 "match": {"kingdom_not": ["Metazoa", "Viridiplantae",
+                                           "Fungi"]},
+                 "phrase": "Tout le reste : algues rouges et brunes, "
+                           "diatomées, amibes. Souvent minuscules, souvent "
+                           "oubliés."},
+            ],
+        },
+    ],
+    "a_part": {
+        "id": "virus", "nom": "Virus", "latin": "Virus",
+        "phrase": "Ni tout à fait vivants, ni tout à fait inertes. Ils n'ont "
+                  "pas de cellule et doivent en emprunter une pour se "
+                  "reproduire.",
+    },
+    "note": "« Procaryote » veut dire « cellule sans noyau » : cela décrit "
+            "les bactéries et les archées, mais ce n'est pas une branche de "
+            "l'arbre. Ces deux domaines sont aussi éloignés l'un de l'autre "
+            "qu'ils le sont de nous.",
+}
+
+
+def _tree_where(match):
+    """Traduit la règle d'un noeud en clause SQL."""
+    if "superkingdom" in match:
+        vals = match["superkingdom"]
+        return (f"superkingdom IN ({','.join('?' * len(vals))})", list(vals))
+    if "kingdom" in match:
+        vals = match["kingdom"]
+        return (f"kingdom IN ({','.join('?' * len(vals))})", list(vals))
+    if "kingdom_not" in match:
+        vals = match["kingdom_not"]
+        return ("superkingdom = 'Eukaryota' AND "
+                f"(kingdom IS NULL OR kingdom NOT IN "
+                f"({','.join('?' * len(vals))}))", list(vals))
+    return ("1=0", [])
+
+
+def _tree_node(conn, node):
+    where, args = _tree_where(node["match"])
+    n = conn.execute(
+        f"SELECT count(*) FROM organisms WHERE {where}", args).fetchone()[0]
+    # Une vignette pour incarner le groupe : sans image, un noeud n'est
+    # qu'un mot latin de plus.
+    row = conn.execute(
+        f"SELECT scientific_name, common_name_fr, common_name_en, image_path "
+        f"FROM organisms WHERE ({where}) AND image_path IS NOT NULL "
+        f"ORDER BY RANDOM() LIMIT 1", args).fetchone()
+    out = {k: node[k] for k in ("id", "nom", "latin", "phrase")}
+    out["count"] = n
+    out["exemple"] = {
+        "nom": (row["common_name_fr"] or row["common_name_en"]
+                or row["scientific_name"]),
+        "scientific_name": row["scientific_name"],
+        "image": row["image_path"],
+    } if row else None
+    return out
+
+
+@api.get("/tree")
+def tree():
+    """L'arbre du vivant, avec les effectifs réels de notre collection."""
+    with connect() as conn:
+        domaines = []
+        for d in TREE["domaines"]:
+            node = _tree_node(conn, d)
+            node["enfants"] = [_tree_node(conn, c) for c in d.get("enfants", [])]
+            domaines.append(node)
+
+        # Les virus se répartissent sur plusieurs realms (-viria) : on les
+        # compte par différence plutôt que d'énumérer une liste qui bougera.
+        viruses = conn.execute(
+            "SELECT count(*) FROM organisms WHERE organism_type "
+            "IN ('Virus', 'Viroïde')").fetchone()[0]
+        vrow = conn.execute(
+            "SELECT scientific_name, common_name_fr, common_name_en, "
+            "image_path FROM organisms WHERE organism_type IN "
+            "('Virus','Viroïde') AND image_path IS NOT NULL "
+            "ORDER BY RANDOM() LIMIT 1").fetchone()
+        total = conn.execute("SELECT count(*) FROM organisms").fetchone()[0]
+
+    a_part = dict(TREE["a_part"])
+    a_part["count"] = viruses
+    a_part["exemple"] = {
+        "nom": (vrow["common_name_fr"] or vrow["common_name_en"]
+                or vrow["scientific_name"]),
+        "scientific_name": vrow["scientific_name"],
+        "image": vrow["image_path"],
+    } if vrow else None
+
+    return {"total": total, "domaines": domaines, "a_part": a_part,
+            "note": TREE["note"]}
+
+
 @api.get("/history")
 def history(limit: int = 12, matched_only: bool = False):
     """Dernières analyses, la plus récente en tête."""
