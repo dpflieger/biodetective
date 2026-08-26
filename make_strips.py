@@ -21,12 +21,50 @@ import random
 import sqlite3
 import sys
 
+import subprocess
+
 import blast_search as bs
 
 FASTA_CANDIDATES = ["biodetective_subset.fasta", "dev_subset.fasta"]
+
+# Au-delà, on ne rapatrie pas la séquence : inutile de charger un chromosome
+# entier en mémoire pour y découper vingt-quatre bases.
+MAX_REF_LEN = 300_000
 OUT = "sequences.json"
 LEGO_MAX_RUN = 2          # jamais 3 briques identiques d'affilée
 TRIES_PER_SPECIES = 250
+
+
+def fetch_from_db(taxid):
+    """Une séquence de référence tirée de la banque BLAST elle-même.
+
+    Évite de dépendre d'un FASTA sur le disque : avec un alias construit par
+    blastdb_aliastool au-dessus de nt, il n'y a aucun FASTA à lire.
+    """
+    cmd = bs.sibling_tool("blastdbcmd")
+    r = subprocess.run([cmd, "-db", bs.BLAST_DB, "-taxids", str(taxid),
+                        "-outfmt", "%a\t%l"],
+                       capture_output=True, text=True, errors="replace")
+    if r.returncode != 0:
+        return None
+    cands = []
+    for line in r.stdout.splitlines():
+        p = line.split("\t")
+        if len(p) == 2 and p[1].strip().isdigit():
+            cands.append((int(p[1]), p[0].strip()))
+    if not cands:
+        return None
+    # La plus longue en deçà du plafond : plus de fragments à essayer, sans
+    # avaler un chromosome.
+    usable = [c for c in cands if 500 <= c[0] <= MAX_REF_LEN] or sorted(cands)
+    usable.sort(key=lambda c: -c[0])
+    _len, acc = usable[0]
+    r2 = subprocess.run([cmd, "-db", bs.BLAST_DB, "-entry", acc,
+                         "-outfmt", "%s"],
+                        capture_output=True, text=True, errors="replace")
+    if r2.returncode != 0:
+        return None
+    return "".join(r2.stdout.split()).upper() or None
 
 
 def load_fasta(path):
@@ -68,19 +106,17 @@ def main():
                     help="positions testées au maximum par espèce")
     args = ap.parse_args()
 
-    fasta = args.fasta or next((f for f in FASTA_CANDIDATES
-                                if os.path.exists(f)), None)
-    if not fasta:
-        print("Aucun FASTA de référence. Lancer extract_from_nt.py d'abord.",
-              file=sys.stderr)
-        return 1
     if not bs.db_available():
         print(f"Banque BLAST absente ({bs.BLAST_DB}).", file=sys.stderr)
         return 1
-    print(f"Références : {fasta}")
-    print(f"Banque     : {bs.BLAST_DB}")
 
-    seqs = load_fasta(fasta)
+    # Un FASTA sur le disque s'il y en a un ; sinon la banque elle-même, qui
+    # peut être un simple alias au-dessus de nt.
+    fasta = args.fasta or next((f for f in FASTA_CANDIDATES
+                                if os.path.exists(f)), None)
+    seqs = load_fasta(fasta) if fasta else {}
+    print(f"Références : {fasta or 'la banque BLAST (blastdbcmd)'}")
+    print(f"Banque     : {bs.BLAST_DB}")
     names = {int(k): v for k, v in
              json.load(open("common_names_fr.json", encoding="utf-8")).items()}
 
@@ -91,7 +127,7 @@ def main():
     entries, skipped = [], []
 
     for taxid, nom_fr in sorted(names.items(), key=lambda kv: kv[1]):
-        ref = seqs.get(str(taxid))
+        ref = seqs.get(str(taxid)) or fetch_from_db(taxid)
         row = conn.execute(
             "SELECT scientific_name, organism_type, image_path "
             "FROM organisms WHERE taxonomy_id=?", (taxid,)).fetchone()

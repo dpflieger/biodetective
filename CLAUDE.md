@@ -98,18 +98,21 @@ Provisoire, issue de la première extraction plafonnée : **44 772 séquences,
 contient qu'un marqueur par espèce — une séquence prise ailleurs dans un génome
 n'y trouve rien. À remplacer par l'extraction sans plafond.
 
-### Brins préparés : 31 sur 33
+### Brins préparés : 32 sur 33
 
-Deux organismes n'ont **aucun fragment de 24 bases qui les distingue** :
+Un seul organisme résiste : le **papillon monarque**. BLAST y arrive, mais tous
+ses fragments discriminants contiennent 3 briques identiques d'affilée, ce que la
+règle LEGO interdit.
 
-- **Papillon monarque** — BLAST y arrive, mais tous les fragments discriminants
-  contiennent 3 briques identiques d'affilée, ce que la règle LEGO interdit.
-- **Vigne** — impossible même à 36 bases : la séquence de référence de
-  *Vitis vinifera* est partagée avec les autres vignes. C'est de la biologie,
-  pas un défaut de réglage. Le meilleur hit reste un *Vitis*.
+La **vigne**, longtemps impossible, est repassée dès que le chloroplaste de
+*Vitis vinifera* a rejoint la banque : la séquence de référence d'origine était
+partagée avec les autres vignes, le chloroplaste ne l'est pas. Illustration de la
+règle générale — **plus la banque est riche, plus il y a de brins possibles**.
 
-Les deux restent dans `common_names_fr.json` : si la banque change, ils
-repasseront peut-être.
+`make_strips.py` sait désormais tirer sa séquence de référence de la banque
+BLAST elle-même, via `blastdbcmd`, quand aucun FASTA n'est présent sur le
+disque. C'est indispensable avec un alias construit au-dessus de nt, où il n'y a
+aucun FASTA à lire.
 
 `taxids.txt` se régénère par
 `sqlite3 biodetective.db "SELECT taxonomy_id FROM organisms;" > taxids.txt`.

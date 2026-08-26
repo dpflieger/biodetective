@@ -15,7 +15,7 @@
       "nom_fr": "Abeille domestique",
       "nom_scientifique": "Apis mellifera",
       "type": "Insecte",
-      "evalue_attendue": 1.1e-06,
+      "evalue_attendue": 1.9e-06,
       "position_reference": 232
     },
     {
@@ -24,269 +24,278 @@
       "nom_fr": "Amanite tue-mouches",
       "nom_scientifique": "Amanita muscaria",
       "type": "Champignon",
-      "evalue_attendue": 1.1e-06,
+      "evalue_attendue": 1.9e-06,
       "position_reference": 530
     },
     {
-      "sequence": "CTTACCTTCCTGACCTTACCGATT",
+      "sequence": "CCTTGTATTGAATTCAACGGAGAT",
       "taxonomy_id": 3702,
       "nom_fr": "Arabette des dames",
       "nom_scientifique": "Arabidopsis thaliana",
       "type": "Plante à fleurs",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 239
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 3174824
     },
     {
-      "sequence": "TTACACCTAGCCGGCGTATCCTCA",
+      "sequence": "TCACAGCAGTACTACTCTTATTAT",
       "taxonomy_id": 9771,
       "nom_fr": "Baleine bleue",
       "nom_scientifique": "Balaenoptera musculus",
       "type": "Mammifère",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 373
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 494
     },
     {
-      "sequence": "ATTATGCACGACTACTTAACAGGT",
+      "sequence": "TTACTTCACTCAAGACTGGTGTTC",
       "taxonomy_id": 3055,
       "nom_fr": "Chlamydomonas",
       "nom_scientifique": "Chlamydomonas reinhardtii",
       "type": "Algue verte",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 611
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 904
     },
     {
-      "sequence": "AGGAGCAATCAACTTCACCACAAC",
+      "sequence": "AATCAACTTCACCACAACCGCCAT",
       "taxonomy_id": 8928,
       "nom_fr": "Cigogne blanche",
       "nom_scientifique": "Ciconia ciconia",
       "type": "Oiseau",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 430
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 436
     },
     {
-      "sequence": "TTGATTAGCAACCTTGCATGGAAT",
+      "sequence": "ACTATTGGAGGATTAACAGGTGTA",
       "taxonomy_id": 41139,
       "nom_fr": "Coccinelle à sept points",
       "nom_scientifique": "Coccinella septempunctata",
       "type": "Insecte",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 222
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 301
     },
     {
-      "sequence": "TATACCGCGCTGAGCTGGAACGTA",
+      "sequence": "GCAACCAATATTGTCGACGCCGAT",
       "taxonomy_id": 562,
       "nom_fr": "Colibacille",
       "nom_scientifique": "Escherichia coli",
       "type": "Bactérie",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 2808
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 4154
     },
     {
-      "sequence": "CCTGGAGTTCCGCCAGAAGAGGCA",
+      "sequence": "GCAACCTGGAGTTCCGCCAGAAGA",
       "taxonomy_id": 4362,
       "nom_fr": "Dionée attrape-mouche",
       "nom_scientifique": "Dionaea muscipula",
       "type": "Plante à fleurs",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 110
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 106
     },
     {
-      "sequence": "GCTCGCAGCCGGCATCACAATGTT",
+      "sequence": "TAGCTTCAGCCGGAGTTGAAGCAG",
       "taxonomy_id": 13397,
       "nom_fr": "Grand requin blanc",
       "nom_scientifique": "Carcharodon carcharias",
       "type": "Requin & raie",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 558
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 293
     },
     {
-      "sequence": "CTACTTATCCGAGCCGAACTCGGC",
+      "sequence": "TGGCTGGAGTATCATCCATCCTAG",
       "taxonomy_id": 30461,
       "nom_fr": "Grand-duc d'Europe",
       "nom_scientifique": "Bubo bubo",
       "type": "Oiseau",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 76
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 428
     },
     {
-      "sequence": "AGTCTTAGTAACCGCAGTATTACT",
+      "sequence": "ATTCCGTTAATAATCGGAGCGCCT",
       "taxonomy_id": 109282,
       "nom_fr": "Hippocampe moucheté",
       "nom_scientifique": "Hippocampus guttulatus",
       "type": "Poisson",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 511
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 197
     },
     {
-      "sequence": "CAGGTAACATAGCTCATGCAGGCT",
+      "sequence": "GCTGCAGGTATTACCATACTATTA",
       "taxonomy_id": 9365,
       "nom_fr": "Hérisson d'Europe",
       "nom_scientifique": "Erinaceus europaeus",
       "type": "Mammifère",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 398
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 607
     },
     {
-      "sequence": "ATTAGATTAGAATTAGCTGCACCT",
+      "sequence": "CATTAGATTAGAATTAGCTGCACC",
       "taxonomy_id": 4932,
       "nom_fr": "Levure de bière",
       "nom_scientifique": "Saccharomyces cerevisiae",
       "type": "Levure",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 1112
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 1111
     },
     {
-      "sequence": "CTGTATTGCTACTTCTATCACTAC",
+      "sequence": "AATCACTGCTGTATTGCTACTTCT",
       "taxonomy_id": 9689,
       "nom_fr": "Lion",
       "nom_scientifique": "Panthera leo",
       "type": "Mammifère",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 528
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 520
     },
     {
-      "sequence": "CGGCTTCATCGTATGAGCTCACCA",
+      "sequence": "AGCTGTTCTCCTTCTACTCTCACT",
       "taxonomy_id": 9233,
       "nom_fr": "Manchot empereur",
       "nom_scientifique": "Aptenodytes forsteri",
       "type": "Oiseau",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 852
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 576
     },
     {
-      "sequence": "TATTCGTATCGGAATTAGCCAGAA",
+      "sequence": "TGGTATTCGTATCGGAATTAGCCA",
       "taxonomy_id": 4577,
       "nom_fr": "Maïs",
       "nom_scientifique": "Zea mays",
       "type": "Plante à fleurs",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 30
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 27
     },
     {
-      "sequence": "TAGGATTGGCTGGAATACCTCGAC",
+      "sequence": "AGTAGGAGGATTAACAGGAGTTGT",
       "taxonomy_id": 7227,
       "nom_fr": "Mouche du vinaigre",
       "nom_scientifique": "Drosophila melanogaster",
       "type": "Insecte",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 3786
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 445
     },
     {
-      "sequence": "GACTATGGATAAGATACCTCTATT",
+      "sequence": "GACCTGGATCTATGCTAGGAGATG",
       "taxonomy_id": 6145,
       "nom_fr": "Méduse lune",
       "nom_scientifique": "Aurelia aurita",
       "type": "Méduse",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 495
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 95
     },
     {
-      "sequence": "TGTGATCAGTACTTATCACAGCAG",
+      "sequence": "GGTCAGCCTGGAGCTCTGTTAGGA",
       "taxonomy_id": 9646,
       "nom_fr": "Panda géant",
       "nom_scientifique": "Ailuropoda melanoleuca",
       "type": "Mammifère",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 507
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 77
     },
     {
-      "sequence": "AGATCGCCAAGCAGGTGGACTACA",
+      "sequence": "CTTCTCTGGTCTGAAGTCGGCGAC",
       "taxonomy_id": 3218,
       "nom_fr": "Physcomitrelle (mousse)",
       "nom_scientifique": "Physcomitrium patens",
       "type": "Mousse",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 349
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 191
     },
     {
-      "sequence": "TGGTGCAGGTACCGGATGAACCGT",
+      "sequence": "ACTCTTACCTCCTTCTCTCACTCT",
       "taxonomy_id": 6645,
       "nom_fr": "Pieuvre commune",
       "nom_scientifique": "Octopus vulgaris",
       "type": "Poulpe & calmar",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 338
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 287
     },
     {
-      "sequence": "AGTCCTAATTACAGCCGTCCTATT",
+      "sequence": "CATTAATCGATGATTATTCTCCAC",
       "taxonomy_id": 9627,
       "nom_fr": "Renard roux",
       "nom_scientifique": "Vulpes vulpes",
       "type": "Mammifère",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 561
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 6
     },
     {
-      "sequence": "TCCTAATTACTGCAATCCTACTCC",
+      "sequence": "TACTGCAATCCTACTCCTCCTATC",
       "taxonomy_id": 57571,
       "nom_fr": "Salamandre tachetée",
       "nom_scientifique": "Salamandra salamandra",
       "type": "Amphibien",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 512
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 519
     },
     {
-      "sequence": "CTTCGACTGGTACGTGGACCACTG",
+      "sequence": "AATCTTCGACTGGTACGTGGACCA",
       "taxonomy_id": 99814,
       "nom_fr": "Séquoia géant",
       "nom_scientifique": "Sequoiadendron giganteum",
       "type": "Conifère",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 156
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 153
     },
     {
-      "sequence": "TTGGTTCCATTAATAATTGGAGCC",
+      "sequence": "GGCATCACTATACTACTGACAGAT",
       "taxonomy_id": 9694,
       "nom_fr": "Tigre",
       "nom_scientifique": "Panthera tigris",
       "type": "Mammifère",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 197
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 566
     },
     {
-      "sequence": "ACCATAAGTCACCAGGATACTACG",
+      "sequence": "GTCACCAGGATACTACGATGGCAG",
       "taxonomy_id": 4081,
       "nom_fr": "Tomate",
       "nom_scientifique": "Solanum lycopersicum",
       "type": "Plante à fleurs",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 363
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 370
     },
     {
-      "sequence": "GCCGGTGCTTCCGTAGACCTAACT",
+      "sequence": "AGGAATAGTCGGCACAGCACTCAG",
       "taxonomy_id": 8469,
       "nom_fr": "Tortue verte",
       "nom_scientifique": "Chelonia mydas",
       "type": "Tortue",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 381
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 44
     },
     {
-      "sequence": "CTAGCTTGTCTCAGTATTGCAAGT",
+      "sequence": "AATACTAGCTTGTCTCAGTATTGC",
       "taxonomy_id": 4232,
       "nom_fr": "Tournesol",
       "nom_scientifique": "Helianthus annuus",
       "type": "Plante à fleurs",
-      "evalue_attendue": 0.00026,
-      "position_reference": 782
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 778
     },
     {
-      "sequence": "CAATATTACTAACGGATCGCAATC",
+      "sequence": "AGTAATCGCCGGTCAGCCATACGG",
+      "taxonomy_id": 29760,
+      "nom_fr": "Vigne",
+      "nom_scientifique": "Vitis vinifera",
+      "type": "Plante à fleurs",
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 108757
+    },
+    {
+      "sequence": "CAGGTATTACAATATTACTAACGG",
       "taxonomy_id": 9785,
       "nom_fr": "Éléphant d'Afrique",
       "nom_scientifique": "Loxodonta africana",
       "type": "Mammifère",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 573
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 564
     },
     {
-      "sequence": "ATATATCTTAATGGCACATGCAGC",
+      "sequence": "AGAGGTTCAATTCCTCTTCTTAAC",
       "taxonomy_id": 9606,
       "nom_fr": "Être humain",
       "nom_scientifique": "Homo sapiens",
       "type": "Mammifère",
-      "evalue_attendue": 1.1e-06,
-      "position_reference": 562
+      "evalue_attendue": 1.9e-06,
+      "position_reference": 4128
     }
   ]
 }

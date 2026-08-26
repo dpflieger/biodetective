@@ -3,7 +3,7 @@
 """
 prepare_blastdb.py — Nettoie le FASTA issu de nt puis construit la banque.
 
-    python3 prepare_blastdb.py --fasta taxids.fasta
+    python3 prepare_blastdb.py --fasta biodetective_subset.fasta
 
 Deux corrections indispensables avant makeblastdb :
 
@@ -68,7 +68,7 @@ def resolve(taxid, wanted, parents, cache):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--fasta", default="taxids.fasta")
+    ap.add_argument("--fasta", default="biodetective_subset.fasta")
     ap.add_argument("--out", default="biodetective_subset.fasta")
     ap.add_argument("--db", default="blastdb/biodetective")
     ap.add_argument("--skip-makeblastdb", action="store_true",

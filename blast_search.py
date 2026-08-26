@@ -54,6 +54,15 @@ def find_blastn():
 
 BLASTN = find_blastn()
 
+
+def sibling_tool(name):
+    """Un autre exécutable BLAST+, à côté de blastn."""
+    if BLASTN:
+        cand = os.path.join(os.path.dirname(BLASTN), name)
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return shutil.which(name) or name
+
 # blastn-short est réglé pour les requêtes courtes : c'est le cas, le
 # Brickopore produit 24 bases.
 TASK = "blastn-short"
