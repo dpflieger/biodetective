@@ -816,7 +816,7 @@ export default function BioDetective() {
     const img = ready.length ? ready[imageIndex % ready.length] : null;
     return (
       <div className="screen screen--search">
-        <h2 className="search__title">IDENTICATION EN COURS</h2>
+        <h2 className="search__title">IDENTIFICATION EN COURS</h2>
 
         <div className="search__frame">
           {montage ? (
