@@ -214,8 +214,19 @@ python3 api.py       # http://localhost:8000
 # Terminal 2
 npm start            # http://localhost:3000, proxy /api → 8000
 ```
-Le port 3000 recharge à chaud mais impose le contrôle d'hôte de react-scripts
-(voir `.env`). Le port 8000 n'a pas cette contrainte.
+Le port 3000 recharge à chaud mais impose le contrôle d'hôte de react-scripts.
+
+⚠️ **`.env.local` n'est pas versionné** et il est nécessaire pour joindre le
+port 3000 par un nom d'hôte plutôt que par son IP. Le recréer après un clone :
+
+```bash
+echo 'DANGEROUSLY_DISABLE_HOST_CHECK=true' > .env.local
+```
+
+react-scripts n'autorise qu'un seul nom d'hôte, l'IP LAN qu'il détecte ; tout
+autre nom reçoit « Invalid Host header ». Ce réglage lève une protection contre
+le DNS rebinding : acceptable pour un serveur de développement sur le réseau de
+l'institut, à ne pas reprendre ailleurs. Le port 8000 n'est pas concerné. Le port 8000 n'a pas cette contrainte.
 
 ---
 

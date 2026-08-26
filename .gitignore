@@ -34,3 +34,4 @@ blast_results/
 genome_reports/
 taxids.fasta
 *.fasta
+.env
