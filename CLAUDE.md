@@ -66,27 +66,37 @@ pour un enfant qui improvise.
 
 ### Chaîne de construction de la banque
 
-**Avec nt copié sur la machine** — la voie retenue, et de loin la plus simple :
+**⚠️ L'alias au-dessus de nt ne convient pas.** `blastdb_aliastool` fonctionne
+et produit bien un `.nal` de 231 octets restreint à nos taxons, mais la
+recherche est **inutilisable** :
+
+| Banque | Séquences | Recherche d'un brin de 24 pb |
+|--------|----------:|------------------------------|
+| Sous-ensemble matérialisé | 44 776 | **0,38 s** |
+| Alias sur nt | 62 549 921 | **plus de 10 min** |
+
+L'alias restreint les **résultats**, pas le **parcours** : blastn traverse
+quand même les 62,5 millions de séquences visées, soit près de la moitié de nt.
+Nos 25 545 taxons se déploient en descendants — *Arabidopsis thaliana* pèse à
+elle seule 270 950 séquences dans nt.
+
+Il faut donc **matérialiser** un sous-ensemble, avec un plafond par espèce.
+Ce plafond n'est plus justifié par la E-value, qui supporterait bien plus,
+mais par le **temps de recherche** : il croît avec la taille de la banque, et
+la démonstration ne dispose que de quelques secondes.
 
 ```bash
-blastdb_aliastool -db nt -taxidlist taxids.txt -dbtype nucl \
-                  -out blastdb/biodetective -title "BioDetective"
+python3 extract_from_nt.py --db /shared/home/dpflieger/blastdb/nt \
+                           --budget 20000 --out biodetective_subset.fasta
+python3 prepare_blastdb.py --fasta biodetective_subset.fasta
 python3 make_strips.py --length 24
 python3 validate_sequences.py
 ```
 
-`blastdb_aliastool` écrit un simple fichier `.nal` **de quelques centaines
-d'octets** qui restreint nt à nos taxons. Aucune extraction, aucune copie de
-séquences, et surtout **l'espace de recherche est réellement réduit** : blastn
-annonce la taille du sous-ensemble, donc les E-value sont justes.
-
-C'est ce dernier point qui départage les deux méthodes. `blastn -db nt
--taxidlist …` filtre bien les résultats mais **calcule les statistiques sur nt
-entier** : vérifié, la taille annoncée reste inchangée, et un brin de 24 briques
-retomberait vers E ≈ 0,1. L'alias, lui, donne 1,0 × 10⁻⁶.
-
-⚠️ Copier **aussi les fichiers `taxdb.btd` et `taxdb.bti`** à côté de nt. Sans
-eux, `-taxidlist` refuse de fonctionner et `staxids` ne rend que des zéros.
+L'attente et la recherche courent désormais **en parallèle** : tant que BLAST
+reste plus rapide que le délai tiré au sort, son coût est entièrement absorbé.
+Vérifié — délai de 3,0 s, durée réelle 3,01 s. Cela laisse de la marge pour une
+banque plus grosse sans rallonger la démonstration d'une seconde.
 
 `extract_from_nt.py` et `prepare_blastdb.py` restent utiles si nt n'est pas
 accessible localement, mais l'alias les rend inutiles dès qu'il l'est.

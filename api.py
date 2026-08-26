@@ -547,10 +547,17 @@ async def run_analysis(job_id: str, sequence: str):
     """
     job = state.jobs[job_id]
     try:
-        await asyncio.sleep(job["planned_duration"])
-
-        hits, archive = await blast_search.search(
-            sequence, archive_id=job_id)
+        # L'attente et la recherche courent ENSEMBLE. Auparavant la seconde
+        # s'ajoutait à la première ; désormais elle se cache derrière, tant
+        # qu'elle reste plus courte — ce qui laisse de la marge pour une
+        # banque plus grosse sans rallonger la démonstration.
+        #
+        # La durée perçue reste donc celle du tirage, indépendante du
+        # résultat : c'est la propriété à préserver.
+        (hits, archive), _ = await asyncio.gather(
+            blast_search.search(sequence, archive_id=job_id),
+            asyncio.sleep(job["planned_duration"]),
+        )
         job["blast_archive"] = archive
 
         # Une fiche par taxon touché, en une seule requête SQL.
