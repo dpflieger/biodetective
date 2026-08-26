@@ -2,12 +2,10 @@
 
 **Identifier un organisme à partir d'une séquence ADN assemblée en briques LEGO et séquencée via le Brickopore**
 
-Une application de médiation scientifique conçue pour la Fête de la Science à
-l'[IBMP](https://ibmp.cnrs.fr/) (Institut de biologie moléculaire des plantes,
-Strasbourg). Un enfant assemble une séquence ADN avec le séquenceur LEGO
-[**Brickopore**](https://brickopore.co.uk/), la saisit dans l'application, et découvre quel être vivant se
-cachait derrière — avec sa photo, l'alignement, la position du hit sur son
-chromosome et sa parenté.
+Une application web de médiation scientifique conçue pour la Fête de la Science. 
+Le grand public assemble une séquence ADN representée par des briques de LEGOs, qui vont ensuite être identifié par le séquenceur
+[**Brickopore**](https://brickopore.co.uk/). La séquence est ensuite saisit dans l'application et elle identifie quel être vivant se
+cachait derrière avec sa photo, l'alignement, la position du hit sur son chromosome et sa parenté.
 
 ![Écran de résultat](docs/resultat.png)
 
