@@ -1,11 +1,11 @@
 # BioDetective
 
-**Identifier un organisme à partir d'une séquence ADN assemblée en briques LEGO.**
+**Identifier un organisme à partir d'une séquence ADN assemblée en briques LEGO et séquencé via le Brickopore**
 
 Une application de médiation scientifique conçue pour la Fête de la Science à
 l'[IBMP](https://ibmp.cnrs.fr/) (Institut de biologie moléculaire des plantes,
 Strasbourg). Un enfant assemble une séquence ADN avec le séquenceur LEGO
-**Brickopore**, la saisit dans l'application, et découvre quel être vivant se
+[**Brickopore**](https://brickopore.co.uk/), la saisit dans l'application, et découvre quel être vivant se
 cachait derrière — avec sa photo, l'alignement, la position du hit sur son
 chromosome et sa parenté.
 
