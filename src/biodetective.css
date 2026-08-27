@@ -1115,3 +1115,12 @@ body {
      on fige la bande sur sa première vignette. */
   .montage__strip { animation: none !important; transform: none !important; }
 }
+
+/* Marqueur du mode simulation. Volontairement discret : utile à l'opérateur
+   qui a le nez sur l'écran, invisible depuis la file d'attente. */
+.api-status__sim {
+  color: var(--color-accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.85em;
+}

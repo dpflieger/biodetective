@@ -32,11 +32,21 @@ from pydantic import BaseModel, Field
 
 import blast_search
 import remote_blast
+import simulate
 from identify import Identifier, SequenceError, normalize
 
 # --------------------------------------------------------------------------
 # Réglages — les trois premiers sont ceux qu'on retouche le jour de la démo
 # --------------------------------------------------------------------------
+
+# MODE SIMULATION. Tant que la banque BLAST définitive n'est pas construite,
+# chaque séquence rend un organisme tiré au sort (voir simulate.py) : la
+# démonstration tourne de bout en bout et la durée de recherche est
+# entièrement sous notre contrôle, puisque plus rien ne cherche vraiment.
+#
+#     BIODETECTIVE_SIMULATE=0 python3 api.py      # vrai blastn
+SIMULATE = os.environ.get("BIODETECTIVE_SIMULATE", "1").lower() not in (
+    "0", "false", "non", "no", "")
 
 # La recherche en table est instantanée. Cette attente EST la mise en scène :
 # elle laisse le temps aux images de défiler et à l'enfant de s'installer.
@@ -51,14 +61,18 @@ from identify import Identifier, SequenceError, normalize
 # avant l'écran de résultat, et toute la mise en scène tomberait.
 #
 # (poids, (durée mini, durée maxi), étiquette de journal)
+#
+# Plafond : 10 s. Au-delà, l'enfant décroche et la file d'attente s'allonge —
+# et en mode simulation l'attente n'a plus aucune justification technique, ce
+# n'est plus que de la mise en scène.
 ANALYSIS_TIERS = [
-    (55, (2.5, 4.0), "rapide"),
-    (30, (4.5, 7.0), "normale"),
-    (12, (7.5, 10.0), "approfondie"),
-    (3, (10.5, 13.0), "très longue"),
+    (35, (4.5, 6.0), "rapide"),
+    (35, (6.0, 7.5), "normale"),
+    (22, (7.5, 9.0), "approfondie"),
+    (8, (9.0, 10.0), "très longue"),
 ]
 
-# Moyenne ~4,9 s. Fixer une durée unique se fait sans toucher au code, utile
+# Moyenne ~6,8 s. Fixer une durée unique se fait sans toucher au code, utile
 # si la file d'attente s'allonge en pleine journée :
 #     BIODETECTIVE_FIXED_DELAY=3 python3 api.py
 _fixed = os.environ.get("BIODETECTIVE_FIXED_DELAY")
@@ -169,6 +183,7 @@ class State:
     history: list = []
     # taxid -> {accession sans version: nom du chromosome}
     replicons: dict = {}
+    simulator: Optional["simulate.Simulator"] = None
 
 
 state = State()
@@ -247,6 +262,7 @@ def record_history(job):
         "organism": o,
         "blast": job.get("blast"),
         "blast_archive": job.get("blast_archive"),
+        "simulated": job.get("simulated", False),
         "remote": job.get("remote"),
     }
     state.history.insert(0, entry)
@@ -292,7 +308,19 @@ async def lifespan(app: FastAPI):
     state.history = load_history()
     state.replicons = load_replicons(GENOME_STATS)
 
-    if not blast_search.blast_available():
+    if SIMULATE:
+        state.simulator = simulate.Simulator(
+            DB_PATH, simulate.load_replicon_map(GENOME_STATS),
+            state.identifier)
+        log.warning("=" * 62)
+        log.warning("MODE SIMULATION — aucun blastn n'est exécuté.")
+        log.warning("Chaque séquence rend un organisme tiré au sort parmi "
+                    "%d.", len(state.simulator))
+        log.warning("Les %d brins préparés rendent bien LEUR organisme.",
+                    len(state.identifier))
+        log.warning("Repasser au vrai BLAST : BIODETECTIVE_SIMULATE=0")
+        log.warning("=" * 62)
+    elif not blast_search.blast_available():
         log.error("blastn introuvable : aucune analyse ne pourra aboutir.")
     elif not blast_search.db_available():
         log.error("Banque BLAST absente (%s). Voir CLAUDE.md.",
@@ -363,6 +391,7 @@ def root():
         "organisms": state.organism_count,
         "known_sequences": len(state.identifier) if state.identifier else 0,
         "analysis_fixed_seconds": ANALYSIS_FIXED_SECONDS,
+        "simulated": SIMULATE,
         "jobs_in_memory": len(state.jobs),
     }
 
@@ -385,6 +414,8 @@ def stats():
         "with_french_name": named_fr,
         "with_english_name": named_en,
         "known_sequences": len(state.identifier) if state.identifier else 0,
+        "simulated": SIMULATE,
+        "simulation_pool": len(state.simulator) if state.simulator else 0,
         "by_type": [{"type": r["organism_type"], "count": r["n"]}
                     for r in by_type],
     }
@@ -554,11 +585,13 @@ async def run_analysis(job_id: str, sequence: str):
         #
         # La durée perçue reste donc celle du tirage, indépendante du
         # résultat : c'est la propriété à préserver.
+        engine = state.simulator if SIMULATE else blast_search
         (hits, archive), _ = await asyncio.gather(
-            blast_search.search(sequence, archive_id=job_id),
+            engine.search(sequence, archive_id=job_id),
             asyncio.sleep(job["planned_duration"]),
         )
         job["blast_archive"] = archive
+        job["simulated"] = SIMULATE
 
         # Une fiche par taxon touché, en une seule requête SQL.
         fiches = organisms_by_taxid([h["taxonomy_id"] for h in hits[:30]])
@@ -591,6 +624,9 @@ async def run_analysis(job_id: str, sequence: str):
             "total_hits": len(hits),
             "alignment": None,
             "relatives": [],
+            # Le frontend s'en sert pour masquer le rapport brut : un rapport
+            # simulé n'a rien à faire sous les yeux d'un visiteur.
+            "simulated": SIMULATE,
         }
         if best:
             job["blast"]["alignment"] = {
@@ -635,7 +671,8 @@ async def run_analysis(job_id: str, sequence: str):
                 "score": best["bitscore"],
                 "fichier": os.path.basename(archive) if archive else "",
             })
-            log.info("[%s] %s -> %s  id %.1f%%  E %.2g", job_id[:8], sequence,
+            log.info("[%s]%s %s -> %s  id %.1f%%  E %.2g", job_id[:8],
+                     " SIM" if SIMULATE else "", sequence,
                      fiches[best["taxonomy_id"]]["scientific_name"],
                      best["percent_identity"], best["evalue"])
         else:
@@ -675,6 +712,7 @@ def job_payload(job):
         "planned_duration": round(job.get("planned_duration", 0), 1),
         "blast": job.get("blast"),
         "blast_archive": job.get("blast_archive"),
+        "simulated": job.get("simulated", False),
         "remote": job.get("remote"),
         "analysis_time": job.get("analysis_time"),
         "error_message": job.get("error_message"),

@@ -37,7 +37,7 @@ const MESSAGE_ROTATE_MS = 2000;
 // En dessous, la saisie est un accident plutôt qu'une séquence.
 const MIN_BASES = 4;
 
-// Les analyses durent de 2,5 à 13 s (tirage côté serveur). Une attente longue
+// Les analyses durent de 4,5 à 10 s (tirage côté serveur). Une attente longue
 // doit avoir l'air de chercher plus profond, pas d'être bloquée : les messages
 // changent donc de registre au fil des secondes.
 const SEARCH_PHASES = [
@@ -50,7 +50,7 @@ const SEARCH_PHASES = [
     ],
   },
   {
-    after: 4500,
+    after: 6000,
     messages: [
       'Aucune correspondance évidente…',
       'Élargissement à la base taxonomique complète…',
@@ -59,7 +59,7 @@ const SEARCH_PHASES = [
     ],
   },
   {
-    after: 8000,
+    after: 8500,
     messages: [
       'Analyse approfondie en cours…',
       'Vérification des derniers candidats…',
@@ -114,6 +114,16 @@ function DnaStrip({ sequence, size = 'normal' }) {
       })}
     </div>
   );
+}
+
+/** Fisher-Yates. Une copie mélangée, l'original intact. */
+function shuffle(list) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 /** Sépare les milliers par une espace fine, comme il se doit en français. */
@@ -465,6 +475,7 @@ export default function BioDetective() {
   const [organism, setOrganism] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [apiOk, setApiOk] = useState(null);
+  const [simulated, setSimulated] = useState(false);
   const [pool, setPool] = useState([]);
   const [ready, setReady] = useState([]);
   const [montages, setMontages] = useState([]);
@@ -483,7 +494,7 @@ export default function BioDetective() {
 
   // Tous les intervalles vivent ici : un timer oublié continue de tourner
   // en fond et fait clignoter l'écran de résultat.
-  const timers = useRef({ poll: null, image: null, message: null });
+  const timers = useRef({ poll: null, image: null, message: null, montage: null });
   const searchStart = useRef(0);
 
   const clearAllIntervals = useCallback(() => {
@@ -507,7 +518,7 @@ export default function BioDetective() {
         const r = await fetch(`${API}/stats`, { headers: { Accept: 'application/json' } });
         const data = await r.json();
         if (!r.ok || typeof data.organisms !== 'number') throw new Error('bad payload');
-        if (alive) setApiOk(true);
+        if (alive) { setApiOk(true); setSimulated(Boolean(data.simulated)); }
       } catch {
         if (alive) setApiOk(false);
         return;
@@ -664,12 +675,33 @@ export default function BioDetective() {
     setScreen('search');
 
     // Animations de l'écran de recherche. Avec une planche, le défilement
-    // est purement CSS et ne coûte aucun timer.
+    // est purement CSS et ne coûte aucun timer… à une exception près :
+    // une planche ne dure que frames × FRAME_MS, soit 2,4 s. Sur une analyse
+    // de 7 s on reverrait donc trois fois les mêmes 30 espèces, et le défilé
+    // se met à ressembler à une boucle plutôt qu'à une fouille. On enchaîne
+    // sur une autre planche à chaque tour : 600 organismes disponibles, de
+    // quoi tenir les 10 s sans jamais se répéter.
     if (!montage) {
       timers.current.image = setInterval(
         () => setImageIndex((i) => i + 1),
         IMAGE_ROTATE_MS
       );
+    } else if (montages.length > 1) {
+      const loop = montage.frames * FRAME_MS;
+      // Une file mélangée plutôt qu'un tirage à chaque tour : on ne repasse
+      // pas deux fois sur la même planche, et surtout on connaît la suivante
+      // assez tôt pour la précharger. Échanger une planche non décodée
+      // ferait un trou noir d'une fraction de seconde en plein défilé.
+      const queue = shuffle(montages.filter((m) => m.file !== montage.file));
+      const preload = (m) => { if (m) { const el = new Image(); el.src = m.file; } };
+      let i = 0;
+      preload(queue[0]);
+      timers.current.montage = setInterval(() => {
+        const next = queue[i % queue.length];
+        i += 1;
+        preload(queue[i % queue.length]);   // toujours un tour d'avance
+        setMontage(next);
+      }, loop);
     }
     searchStart.current = Date.now();
     let m = 0;
@@ -717,7 +749,7 @@ export default function BioDetective() {
         fail('La connexion au serveur a été interrompue.');
       }
     }, POLL_MS);
-  }, [input, montage, clearAllIntervals, fail, finish]);
+  }, [input, montage, montages, clearAllIntervals, fail, finish]);
 
   const onKeyDown = (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) startAnalysis();
@@ -808,6 +840,14 @@ export default function BioDetective() {
         {apiOk === null && 'Connexion au serveur…'}
         {apiOk === true && 'Serveur connecté'}
         {apiOk === false && 'Serveur injoignable — lancer : python3 api.py'}
+        {/* Discret, mais jamais absent : l'opérateur doit pouvoir vérifier
+            d'un coup d'oeil qu'il est en simulation, sans que ce soit lisible
+            depuis l'autre bout de la salle. */}
+        {apiOk === true && simulated && (
+          <span className="api-status__sim" title="Aucun BLAST réel n'est exécuté">
+            {' · mode démo'}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -957,7 +997,12 @@ export default function BioDetective() {
         <Ideogram data={blast && blast.alignment && blast.alignment.ideogram} />
         <Alignment data={blast && blast.alignment} />
 
-        {!fromHistory && <RawReport jobId={jobId} />}
+        {/* Le rapport brut n'est proposé que s'il est vrai. En mode
+            simulation il n'y a pas de blastn derrière, et montrer une trace
+            fabriquée à un collègue bioinformaticien serait pire que de ne
+            rien montrer du tout. */}
+        {!fromHistory && !(blast && blast.simulated)
+          && <RawReport jobId={jobId} />}
       </div>
     );
   };
