@@ -7,7 +7,8 @@ dans un navigateur.
 
 **Fait :**
 - `data_pipeline.py` → `biodetective.db` (25 545 organismes, ~6 s de construction)
-- `common_names_fr.json` → 33 noms français
+- `common_names_fr.json` → 33 noms français écrits à la main
+- `build_common_names_fr.py` → 6 273 noms français récoltés sur Wikidata
 - `sequences.json` → table de correspondance de la démo (33 organismes)
 - `identify.py` → normalisation + recherche exacte
 - `validate_sequences.py` → contrôle avant démo
@@ -17,6 +18,15 @@ dans un navigateur.
 
 **Reste à faire :** les fiches descriptives, le cache d'images local, et la
 répétition générale en salle. Voir la roadmap.
+
+> ### 🎭 En ce moment : MODE SIMULATION
+>
+> `BIODETECTIVE_SIMULATE=1` (**valeur par défaut**) : aucun blastn n'est
+> exécuté. Chaque séquence rend un organisme, tiré au sort parmi 1 078 quand la
+> séquence est inventée, et le bon quand c'est un brin préparé. Voir
+> [Mode simulation](#-mode-simulation).
+>
+> `BIODETECTIVE_SIMULATE=0` repasse au vrai BLAST, qui reste intact.
 
 Voir la [Roadmap](#-roadmap-ordre-de-construction) en fin de fichier pour l'ordre de construction.
 
@@ -28,6 +38,95 @@ Voir la [Roadmap](#-roadmap-ordre-de-construction) en fin de fichier pour l'ordr
 
 ### Concept
 Un séquenceur LEGO (Brickopore) génère des séquences ADN à partir de briques colorées. L'utilisateur colle cette séquence dans BioDetective, qui identifie l'organisme et affiche sa photo avec une fiche descriptive dans une interface futuriste façon série policière.
+
+## 🎭 Mode simulation
+
+**Actif par défaut.** Tant que la banque BLAST définitive n'est pas
+construite, `simulate.py` remplace `blast_search.py` : même signature, même
+forme de résultat, l'application ne voit pas la différence.
+
+```bash
+python3 api.py                            # simulation (défaut)
+BIODETECTIVE_SIMULATE=0 python3 api.py    # vrai blastn
+python3 simulate.py GATTACAGATTACAGGCATTA # essai en ligne de commande
+```
+
+### Ce qui est inventé, ce qui ne l'est pas
+
+| | |
+|---|---|
+| **Inventé** | le choix de l'organisme, le nombre de mésappariements, la position du hit |
+| **Réel** | l'organisme, sa photo, sa lignée, son génome, ses chromosomes et **leurs numéros d'accession** ; les cousins sont ses vrais cousins ; le score et la E-value sortent des vraies formules de Karlin-Altschul |
+
+La seule chose qu'on se refuse à inventer, c'est **un numéro d'accession** :
+un `NC_` fabriqué désignerait une vraie séquence, appartenant à autre chose.
+Quand on n'en a pas de vrai, on n'en affiche pas.
+
+### Les brins préparés restent justes
+
+Une séquence de `sequences.json` rend **son** organisme, à **100 %**. Ce sont
+les exemples imprimés qu'on tend aux enfants : ils doivent tomber juste à tous
+les coups. Tout le reste est tiré au sort — mais **de façon reproductible** :
+le tirage est amorcé par la séquence elle-même, donc recoller la même séquence
+redonne le même organisme. L'enfant qui revient avec ses parents retrouve bien
+son animal.
+
+### Le pool : 1 078 organismes, pas 25 545
+
+On ne tire pas dans toute la base. La plupart des 25 545 organismes n'ont ni
+nom commun, ni génome connu, et donneraient un écran à moitié vide au moment
+le plus attendu. Le pool est donc restreint à ceux qui ont **une photo, un nom
+lisible à voix haute, et une carte des chromosomes** — tout ce qu'il faut pour
+remplir la fiche, l'idéogramme et la localisation du hit.
+
+Les brins préparés, eux, échappent au pool : trois d'entre eux (amanite,
+dionée, salamandre) n'ont ni chromosomes ni taille de génome. On n'affiche
+alors ni locus ni idéogramme plutôt que d'inventer les deux ; l'alignement,
+lui, reste — c'est de toute façon ce que les enfants regardent.
+
+| Brins préparés | Ce qu'on affiche |
+|---:|---|
+| 23 | chromosome nommé, accession réelle, idéogramme |
+| 6 | génome entier comme axe, accession de l'assemblage |
+| 3 | l'alignement seul |
+
+### Des chiffres qu'un bioinformaticien peut vérifier
+
+La E-value et le bitscore ne sont pas tirés au sort : ils sortent des formules
+de Karlin-Altschul avec les paramètres que `blastn -task blastn-short` imprime
+lui-même — λ 1,37, K 0,711, H 1,31, reward 1, penalty −3.
+
+L'ajustement de longueur est recalculé par point fixe, comme le fait BLAST.
+Vérification : pour 24 pb contre 44 772 séquences / 32 020 836 lettres, on
+retrouve **exactement** les 313 940 280 que blastn imprime sous
+« Effective search space used », et un hit parfait ressort à
+**E = 1,2 × 10⁻⁶** — la valeur mesurée sur le vrai brin « Lion ».
+
+Le nombre de mésappariements est borné par la E-value, pas par le hasard : sur
+24 pb, 2 mésappariements donnent E = 0,067 et 3 donnent **E = 16**, au-dessus
+du seuil où blastn ne rapporte plus rien. On ne fabrique donc que des
+alignements que BLAST aurait réellement rendus : 100 % ou 95,8 % en tête.
+
+### Le dégradé des cousins est faible, et c'est normal
+
+Les cousins perdent 1 à 2 mésappariements à mesure qu'on s'éloigne dans la
+taxonomie, pas davantage. Un dégradé plus spectaculaire serait plus joli et
+faux : sur le vrai brin « Lion », les vrais cousins sortaient à 100 % et
+95,5 %, parce qu'une région conservée l'est chez toute la famille.
+
+### On ne pourra pas confondre plus tard
+
+- Les traces s'appellent `…_SIMULATION.txt` et s'ouvrent sur
+  `# ANALYSE SIMULEE — AUCUN BLAST REEL`.
+- Le journal l'annonce en `WARNING` au démarrage, et marque `SIM` chaque ligne
+  d'analyse.
+- `GET /api/stats` et chaque job portent `simulated: true`.
+- L'accueil affiche « · mode démo » à côté de l'état du serveur — lisible pour
+  qui a le nez sur l'écran, pas depuis la file d'attente.
+- **`▸ Voir le rapport BLAST brut` disparaît.** Montrer une trace fabriquée à
+  un collègue bioinformaticien serait pire que de ne rien montrer.
+
+---
 
 ### Identification par BLAST réel
 
@@ -136,9 +235,12 @@ emplacements conda usuels ; `BIODETECTIVE_BLASTN` force un chemin.
 ```
 Biodetective/
 ├── data_pipeline.py         # [FAIT] new_taxdump/ → biodetective.db
-├── common_names_fr.json     # [FAIT] taxid → nom français (maintenu à la main)
+├── common_names_fr.json     # [FAIT] 33 noms français écrits à la main — gagne toujours
+├── build_common_names_fr.py # [FAIT] récolte les noms français sur Wikidata
+├── common_names_fr_wikidata.json # [GÉNÉRÉ] 6 273 noms, 461 ko, versionné
 ├── sequences.json           # [FAIT] séquence → taxid (cœur de la démo)
 ├── identify.py              # [FAIT] normalisation + recherche exacte
+├── simulate.py              # [FAIT] analyse simulée — ACTIF PAR DÉFAUT
 ├── validate_sequences.py    # [FAIT] contrôle avant démo
 ├── make_montages.py         # [FAIT] fabrique les planches de l'écran de recherche
 ├── biodetective.db          # [GÉNÉRÉ] 25 545 organismes, 11 Mo
@@ -349,12 +451,25 @@ arrive de temps en temps.
 
 | Poids | Durée | Registre |
 |-------|-------|----------|
-| 55 % | 2,5 – 4 s | rapide |
-| 30 % | 4,5 – 7 s | normale |
-| 12 % | 7,5 – 10 s | approfondie |
-| 3 % | 10,5 – 13 s | très longue |
+| 35 % | 4,5 – 6 s | rapide |
+| 35 % | 6 – 7,5 s | normale |
+| 22 % | 7,5 – 9 s | approfondie |
+| 8 % | 9 – 10 s | très longue |
 
-Moyenne ≈ 4,9 s. Réglable dans `ANALYSIS_TIERS` en tête d'`api.py`.
+Moyenne ≈ 6,8 s. Réglable dans `ANALYSIS_TIERS` en tête d'`api.py`.
+
+**Plancher 4,5 s, plafond 10 s.** Le plafond, parce qu'au-delà l'enfant
+décroche et la file s'allonge — c'était 13 s tant qu'une vraie recherche
+pouvait justifier l'attente. Le plancher, parce qu'à 2,5 s la mise en scène
+n'avait pas le temps d'exister : l'écran de recherche passait avant qu'on
+l'ait regardé.
+
+Mesuré sur 40 analyses : 4,74 à 9,90 s, moyenne 6,93 s, médiane 6,59 s,
+**dépassement maximal 130 ms** par rapport à la durée tirée.
+
+Les seuils de `SEARCH_PHASES` ont suivi : 6 s et 8,5 s, contre 4,5 et 8. Sinon
+la phase « Aucune correspondance évidente… » se déclenchait sur presque toutes
+les analyses, y compris les plus courtes.
 
 #### ⚠️ La durée ne doit jamais dépendre du résultat
 
@@ -435,7 +550,7 @@ amanite 1,5 Mo, pieuvre 1,2 Mo) : à précharger, sinon l'affichage traîne.
 CREATE TABLE organisms (
     taxonomy_id INTEGER PRIMARY KEY,    -- NCBI Taxonomy ID
     scientific_name TEXT NOT NULL,       -- Nom scientifique binomial
-    common_name_fr TEXT,                 -- Nom commun français (33 renseignés, voir plus bas)
+    common_name_fr TEXT,                 -- Nom commun français (6 278 renseignés, voir plus bas)
     common_name_en TEXT,                 -- Nom commun anglais (depuis names.dmp)
     kingdom TEXT,                        -- Règne
     phylum TEXT,                         -- Embranchement
@@ -475,12 +590,78 @@ Les colonnes sont créées dès maintenant pour ne pas avoir à migrer le schém
 mais **le composant React doit masquer toute ligne dont la valeur est NULL ou vide**.
 Une fiche avec sept champs « — » est pire que pas de fiche.
 
-### `common_name_fr` vient d'un fichier à part
+### `common_name_fr` vient de deux fichiers superposés
 `names.dmp` ne contient quasiment que des noms communs anglais (`genbank common name`) :
-**0 nom français** sur 25 545 organismes. Les noms français sont donc maintenus à la main
-dans `common_names_fr.json` (taxid → nom), relu par `data_pipeline.py` à chaque construction.
-Actuellement **33 renseignés** — les organismes de la démo. En ajouter = éditer ce fichier
-et relancer le pipeline.
+**0 nom français** sur 25 545 organismes. Ils viennent donc d'ailleurs, et de deux
+endroits que `data_pipeline.py` empile dans cet ordre :
+
+| Fichier | Noms | Rôle |
+|---|---:|---|
+| `common_names_fr_wikidata.json` | 6 273 | récolté, le volume |
+| `common_names_fr.json` | 33 | écrit à la main, **le mot de la fin** |
+
+Total en base : **6 278** (25 %), dont **2 295 là où l'anglais manquait**.
+
+```bash
+python3 build_common_names_fr.py     # -> common_names_fr_wikidata.json, ~16 min
+python3 data_pipeline.py             # la base les reprend
+```
+
+**Le fichier à la main gagne toujours** — 11 des 33 corrigent la récolte. Wikidata
+propose « Arabette rameuse » et « Fausse Arabette » là où l'on veut lire « Arabette
+des dames » devant des enfants : corriger doit rester une ligne à éditer, pas une
+bataille contre le prochain rafraîchissement.
+
+#### La bonne propriété est P1843, pas le label
+
+Wikidata relie ses fiches aux taxons NCBI par **P685** (le taxid). Le piège est de
+lire le mauvais champ :
+
+| taxon | `rdfs:label` fr | `P1843` fr |
+|---|---|---|
+| *Apis mellifera* | « Apis mellifera » | **« Abeille européenne »** |
+| *Arabidopsis thaliana* | « Arabidopsis thaliana » | **« Arabette des dames »** |
+| *Escherichia coli* | « Escherichia coli » | *(aucune)* |
+
+`rdfs:label` est très souvent le nom scientifique recopié. Le prendre tel quel
+remplirait `common_name_fr` de latin, ce qui est **pire que vide** : le français
+passe avant l'anglais dans `display_name`, donc un faux nom français **masquerait un
+vrai nom anglais**. D'où P1843 d'abord, le label seulement s'il diffère.
+
+#### Quatre façons de laisser passer du latin
+
+Toutes rencontrées sur un essai de 1 000 taxons, toutes filtrées :
+
+| Piège | Exemple |
+|---|---|
+| recopie du nom scientifique | *Apis mellifera* → « Apis mellifera » |
+| binôme commençant par notre genre | *Zea mays* → « Zea mays subsp. mays » |
+| **synonyme sous un autre genre** | *Ephemerocybe congregata* → « Coprinellus congregatus » |
+| épithète ou genre nus | *Trichoplusia ni* → « Ni » |
+
+Le troisième est invisible si l'on ne compare qu'à **notre** nom scientifique : il
+faut demander le **P225** de la fiche Wikidata et rejeter ce qui lui est égal. Les 8
+rejets ajoutés par ces filtres sont tous corrects, sans perdre un seul bon nom.
+
+#### Rendement : 25 %, très inégal selon les groupes
+
+| Groupe | Noms fr | Total | |
+|---|---:|---:|---:|
+| Oiseaux | 2 830 | 3 092 | **92 %** |
+| Mammifères | 740 | 1 407 | 53 % |
+| Poissons | 618 | 2 216 | 28 % |
+| Plantes à fleurs | 1 115 | 8 462 | 13 % |
+| Insectes | 364 | 4 201 | 9 % |
+| Champignons | 112 | 1 478 | 8 % |
+
+Les oiseaux ont une nomenclature française officielle et complète ; les insectes et
+les champignons n'en ont pas. **14 779 organismes restent sans aucun nom commun**, ni
+français ni anglais — `display_name` retombe alors sur le nom scientifique.
+
+Le script est **reprenable** : il note les taxids déjà interrogés, donc une coupure
+réseau ne coûte que le lot en cours (3 coupures rattrapées sur la récolte complète).
+`--limit N` pour un essai, `--restart` pour tout redemander, `--update-db` pour
+écrire dans la base sans reconstruire — pratique si `new_taxdump/` a été effacé.
 
 `common_name_en` est en revanche rempli pour **8 471 organismes** (33 %), donc l'anglais
 peut servir de repli quand le français manque.
@@ -620,8 +801,26 @@ principale du choix de la planche plutôt que du GIF ; l'autre est le poids :
 À 12 images/seconde, `prefers-reduced-motion` **fige la bande** sur sa première
 vignette plutôt que de la ralentir. Vérifié.
 
+**Une planche ne dure que 2,4 s** (30 vignettes × 80 ms). Une analyse de 7 s
+repasserait donc trois fois sur les mêmes 30 espèces, et le défilé se met à
+ressembler à une boucle plutôt qu'à une fouille. Le frontend **enchaîne sur
+une autre planche à chaque tour**, tirée d'une file mélangée : 2 à 4 planches
+par analyse, soit 60 à 120 organismes distincts, jamais deux fois la même
+planche.
+
+La suivante est **préchargée un tour à l'avance**. Échanger une planche non
+décodée ferait un trou noir d'une fraction de seconde en plein milieu du
+défilé — c'est le même piège que la prop `key` sur l'image qui tourne, sous
+une autre forme.
+
 Si `public/montages/` est absent, le frontend retombe sur une rotation image par
 image via `/api/random-images` : dégradé mais fonctionnel.
+
+⚠️ **Si la bande ne défile plus**, deux causes à écarter avant toute autre :
+`prefers-reduced-motion` activé sur la machine — le réglage fige
+volontairement la bande sur sa première vignette (12 images/seconde, c'est
+beaucoup pour qui y est sensible) — et un `build/` obsolète : `npm run build`
+puis rechargement forcé du navigateur (Ctrl+Maj+R).
 
 ---
 
@@ -1058,7 +1257,7 @@ Idem `Wikimedia Commons` (22 130) vs `Wikimedia  Commons` (double espace, 2) vs
       l'organisme (distance d'édition sur `sequences.json`). Transformerait la majorité des
       « séquence inconnue » en résultats. **À arbitrer** : contredit le choix du lookup exact.
 - [ ] **Fiches descriptives** — remplir `fun_facts` & co. à la main pour les organismes de `sequences.json`
-- [ ] **Noms communs français** — enrichissement via Wikidata API
+- [x] ~~**Noms communs français** — enrichissement via Wikidata API~~ ✅ 6 278
 - [ ] **Images en local** — supprimer la dépendance au NCBI le jour J
 - [ ] **Arbre phylogénétique interactif** — SVG/D3.js avec la table `phylogenetic_tree`
 - [ ] **Son/musique** — ambiance sonore pendant la recherche
@@ -1075,7 +1274,9 @@ Idem `Wikimedia Commons` (22 130) vs `Wikimedia  Commons` (double espace, 2) vs
 6. ~~Frontend : accueil → recherche → résultat~~ ✅
 7. ~~Frontend : écran « séquence inconnue »~~ ✅
 8. ~~Polices locales~~ ✅, ~~purge des jobs~~ ✅, ~~serveur unique~~ ✅, cache d'images **local** (reste à faire)
-9. Répétition générale dans les conditions réelles de la salle
+9. ~~Mode simulation, pour faire tourner la démo sans banque BLAST~~ ✅
+10. Extraction matérialisée depuis nt local, puis `BIODETECTIVE_SIMULATE=0`
+11. Répétition générale dans les conditions réelles de la salle
 
 ---
 

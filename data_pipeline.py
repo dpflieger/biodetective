@@ -23,6 +23,7 @@ from collections import Counter
 TAXDUMP_DIR = "new_taxdump"
 DEFAULT_DB = "biodetective.db"
 NAMES_FR = "common_names_fr.json"
+NAMES_FR_WIKIDATA = "common_names_fr_wikidata.json"
 GENOME_STATS = "genome_stats.json"
 
 SEP = "\t|\t"       # séparateur de champs des .dmp NCBI
@@ -171,21 +172,48 @@ def load_lineages(path, wanted):
     return out
 
 
-def load_common_names_fr(path):
-    """taxid -> nom français, depuis un fichier maintenu à la main.
+def load_common_names_fr(manual_path, harvested_path=None):
+    """taxid -> nom français, de deux fichiers superposés.
 
     Le taxdump NCBI ne contient quasiment aucun nom commun français
-    (les 'genbank common name' sont anglais). Les noms français vivent donc
-    dans common_names_fr.json, à part, pour survivre à une reconstruction
-    de la base. Fichier absent = base construite sans noms français.
+    (les 'genbank common name' sont anglais). Les noms français viennent donc
+    d'ailleurs, et de deux endroits :
+
+      * `common_names_fr_wikidata.json`, récolté par
+        build_common_names_fr.py — le gros du volume ;
+      * `common_names_fr.json`, écrit à la main — le mot de la fin.
+
+    **Le fichier à la main gagne toujours.** Wikidata propose parfois
+    « Arabette rameuse » là où l'on veut lire « Arabette des dames » devant
+    des enfants ; corriger doit rester une ligne à éditer, pas une bataille
+    contre le prochain rafraîchissement.
     """
-    if not os.path.exists(path):
-        log.warning("%s absent : aucun nom français ne sera renseigné", path)
-        return {}
-    with open(path, encoding="utf-8") as fh:
-        data = json.load(fh)
-    log.info("%s : %d noms français", path, len(data))
-    return {str(k): v for k, v in data.items()}
+    names = {}
+
+    if harvested_path and os.path.exists(harvested_path):
+        with open(harvested_path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        # Le fichier récolté est un document ; l'ancien format était un dict
+        # plat, qu'on accepte encore.
+        harvested = doc.get("names", doc) if isinstance(doc, dict) else {}
+        names.update({str(k): v for k, v in harvested.items()
+                      if not str(k).startswith("_")})
+        log.info("%s : %d noms français récoltés", harvested_path, len(names))
+
+    if os.path.exists(manual_path):
+        with open(manual_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        manual = {str(k): v for k, v in data.items()}
+        overrides = sum(1 for k, v in manual.items()
+                        if k in names and names[k] != v)
+        names.update(manual)
+        log.info("%s : %d noms à la main (%d corrigent la récolte)",
+                 manual_path, len(manual), overrides)
+    elif not names:
+        log.warning("%s absent : aucun nom français ne sera renseigné",
+                    manual_path)
+
+    return names
 
 
 def load_genome_stats(path):
@@ -459,7 +487,7 @@ def build(db_path, taxdump_dir):
     sci, common_en = load_names(names_path, wanted)
     lineages = load_lineages(ranked_path, wanted)
     ranks = load_ranks(nodes_path, wanted)
-    names_fr = load_common_names_fr(NAMES_FR)
+    names_fr = load_common_names_fr(NAMES_FR, NAMES_FR_WIKIDATA)
     genomes = load_genome_stats(GENOME_STATS)
 
     rows, skipped = [], 0
